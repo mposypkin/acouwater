@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include "linalg.h"
+#include "ap.h"
 
 const double LOCAL_M_PI = 3.14159265358979323846;
 const double START_RESIDUAL = 1e100;

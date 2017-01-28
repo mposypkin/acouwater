@@ -13,7 +13,7 @@
 #include <vector>
 #include <sspemdd_sequential.h>
 
-namespace OPTITEST {
+namespace ACOUSTIC {
 
     class AcousticsHomogWaterObjective : public COMPI::Functor <double> {
     public:
@@ -56,7 +56,7 @@ namespace OPTITEST {
          * vecA = {1600, 1.4, -0.015}
          * vecB = {1900, 2.0, 0.015}
          */
-        AcousticsHomogWaterProblemFactory(int n, std::vector<double> vecA, std::vector<double> vecB) :
+        AcousticsHomogWaterProblemFactory(int n, const std::vector<double>& vecA, const std::vector<double>& vecB) :
         mN(n),
         mA(vecA),
         mB(vecB) {
