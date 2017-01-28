@@ -6,6 +6,7 @@ The project root (this) folder should be at the same level as COMPI and snowgoos
 To build the project:
 
 make dep
+
 make
 
 To clean the project
