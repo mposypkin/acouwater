@@ -1,14 +1,14 @@
 # acouwater
-Optimization problem arising in modelling of sea surface with acousti waves
+Optimization problem arising in modelling of sea surface with acoustiс waves
 
 The project root (this) folder should be at the same level as COMPI and snowgoose folders
 
 To build the project:
 
-make dep
+    make dep
 
-make
+    make
 
-To clean the project
+To clean the project:
 
-make clean
+    make clean
