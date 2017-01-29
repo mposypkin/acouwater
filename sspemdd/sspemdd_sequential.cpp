@@ -4,15 +4,15 @@
 #include <time.h>
 
 sspemdd_sequential::sspemdd_sequential() :
+	object_function_type("weighted"),
+	h(0),
+	H(0),
 	ncb(1),
 	nrhob(1),
 	nR(41),
 	ntau(1),
-	ncpl(1),
 	cb1(2000.0),
 	cb2(2000.0),
-	cw1(1450.0),
-	cw2(1500.0),
 	R1(3400.0),
 	R2(3600.0),
 	tau1(0.0),
@@ -20,17 +20,16 @@ sspemdd_sequential::sspemdd_sequential() :
 	rhob1(2.0),
 	rhob2(2.0),
 	n_layers_w(1),
-	launchType(0),
 	iterated_local_search_runs(10),
 	verbosity(0),
-	isHomogeneousWaterLayer (false),
-	N_total (1)
+	N_total (1),
+	rank (0)
 {
-	record_point.cb = 1e50;
-	record_point.rhob = 1e50;
-	record_point.R = 1e50;
-	record_point.tau = 1e50;
-	record_point.residual = START_RESIDUAL;
+	record_point.cb       = START_HUGE_VALUE;
+	record_point.rhob     = START_HUGE_VALUE;
+	record_point.R        = START_HUGE_VALUE;
+	record_point.tau      = START_HUGE_VALUE;
+	record_point.residual = START_HUGE_VALUE;
 	srand((unsigned)time(NULL));
 	start_chrono_time = std::chrono::high_resolution_clock::now();
 }
@@ -77,7 +76,6 @@ double sspemdd_sequential::compute_modal_delays_residual_uniform(std::vector<dou
 	//2016.04.27:Pavel: now we use RMS as the residual
     unsigned nRes = 0;
 
-
 	std::vector<std::vector<double>> modal_group_velocities;
 	std::vector<unsigned> mode_numbers;
 
@@ -107,6 +105,76 @@ double sspemdd_sequential::compute_modal_delays_residual_uniform(std::vector<dou
 	}
     //2016.04.27:Pavel: RMS
 	residual = sqrt(residual/nRes);
+
+	/*std::ofstream ofile("R_mgv");
+	for (unsigned ii = 0; ii < freqs.size(); ii++) {
+		mnumb = mode_numbers.at(ii);
+		ofile << freqs.at(ii) << "\t";
+		for (unsigned jj = 0; jj < mnumb; jj++)
+			ofile << R / modal_group_velocities[ii][jj] << "\t";
+		ofile << std::endl;
+	}
+	ofile.close();*/
+
+	return residual;
+}
+
+//2016.12.31:Pavel: a residual functions where the "experimental" spectrogram modulud is taken as the weight coefficients
+//this is a simplest nonuniform residual function
+
+double sspemdd_sequential::compute_modal_delays_residual_weighted(std::vector<double> &freqs,
+	std::vector<double> &depths,
+	std::vector<double> &c1s,
+	std::vector<double> &c2s,
+	std::vector<double> &rhos,
+	std::vector<unsigned> &Ns_points,
+	double R,
+	double tau,
+	std::vector<std::vector<double>> &experimental_delays,
+    std::vector<std::vector<double>> &weight_coeffs,   //2016.12.31:Pavel: this is a key parameter controlling the weights
+	std::vector<unsigned> &experimental_mode_numbers
+	)
+{
+	unsigned rord = 3;
+	unsigned flTrappedOnly = 1;
+	double deltaf = 0.05;
+	double residual = 0;
+	unsigned mnumb;
+	double mdelay;
+	//2016.04.27:Pavel: now we use RMS as the residual
+    unsigned nRes = 0;
+
+	std::vector<std::vector<double>> modal_group_velocities;
+	std::vector<unsigned> mode_numbers;
+
+	compute_modal_grop_velocities(freqs, deltaf, depths, c1s, c2s, rhos, Ns_points, flTrappedOnly, rord, modal_group_velocities, mode_numbers);
+
+	for (unsigned ii = 0; ii<freqs.size(); ii++) {
+		//2016.04.27:Pavel: mnumb = std::min(mode_numbers.at(ii), experimental_mode_numbers.at(ii));
+		mnumb = experimental_mode_numbers.at(ii);
+		for (unsigned jj = 0; jj<mnumb; jj++) {
+			if (experimental_delays[ii][jj]>0) {
+                nRes = nRes + 1;
+                //2016.04.27:Pavel:
+                if ( jj<mode_numbers.at(ii) ) {
+                    mdelay = R / modal_group_velocities[ii][jj];
+                }
+                else if ( (ii+1<freqs.size()) && (jj<mode_numbers.at(ii+1))  ) {
+                    mdelay = R / modal_group_velocities[ii+1][jj];
+                }
+                else {
+                    mdelay = 0;
+                }
+				//tau_comment: this is the very place where it comes into play in the computation
+				//please check the search block!
+                                //2016.12.31:Pavel: weight coefficients are included
+				residual = residual + weight_coeffs[ii][jj]*pow(experimental_delays[ii][jj] + tau - mdelay, 2);
+			}
+		}
+	}
+    //2016.04.27:Pavel: RMS
+	double d = (double)(residual / (double)nRes);
+	residual = sqrt(d);
 
 	/*std::ofstream ofile("R_mgv");
 	for (unsigned ii = 0; ii < freqs.size(); ii++) {
@@ -628,34 +696,38 @@ std::vector<double> sspemdd_sequential::compute_wnumbers(double &omeg, // sound 
 
 void sspemdd_sequential::init()
 {
-	N_total = (unsigned long long)round(pow(ncpl, n_layers_w))*nR*nrhob*ncb*ntau;
-	if ((launchType == 1) || (launchType == 3) || (launchType == 7) || (launchType == 8))
-		N_total /= ncpl;
-	std::cout << "N_total " << N_total << std::endl;
+	unsigned ppm = 2;
+	double layer_thickness_w = h / n_layers_w;
 
-	// TODO move to constructor
-	std::vector<double> tmp_vec;
-	if (isHomogeneousWaterLayer)
-		tmp_vec.push_back(cw1);
-	else {
-		tmp_vec.push_back(1490);
-		tmp_vec.push_back(1490);
-		tmp_vec.push_back(1480);
-		tmp_vec.push_back(1465);
-		tmp_vec.push_back(1460);
-	}
-	cws_fixed = tmp_vec; // use when ncpl = 1
-	record_point.cws.resize(n_layers_w);
-	for (unsigned i = 0; i < record_point.cws.size(); i++)
-		record_point.cws[i] = cw2;
+	for (unsigned jj = 1; jj <= n_layers_w; jj++)
+	depths.push_back(layer_thickness_w*jj);
+	depths.push_back(H);
 
-	record_point.cb = 1e50;
-	record_point.rhob = 1e50;
-	record_point.R = 1e50;
-	record_point.tau = 1e50;
-	record_point.residual = START_RESIDUAL;
+	c1s.resize(n_layers_w + 1);
+	for (auto &x : c1s)
+	x = 1500;
+	c2s.resize(n_layers_w + 1);
+	for (auto &x : c2s)
+	x = 1500;
+	rhos.resize(n_layers_w + 1);
+	for (auto &x : rhos)
+	x = 1;
+	Ns_points.resize(n_layers_w + 1);
+	for (auto &x : Ns_points)
+	x = (unsigned)round(ppm*layer_thickness_w);
+	Ns_points.at(n_layers_w) = (unsigned)round(ppm*(H - h));
+
+	N_total = nR*nrhob*ncb*ntau;
+	for (auto &x : ncpl_arr)
+		N_total *= (unsigned long long)x;
+
+	if (!rank)
+		std::cout << "N_total " << N_total << std::endl;
 
 	loadValuesToSearchSpaceVariables();
+
+	if (!rank)
+		std::cout << "init() finished" << std::endl;
 }
 
 void sspemdd_sequential::report_final_result()
@@ -694,14 +766,10 @@ void sspemdd_sequential::findGlobalMinBruteForce()
 	for (unsigned variable_index = 0; variable_index < search_space.size(); variable_index++)
 		for ( unsigned j=0; j < search_space[variable_index].size(); j++)
 			search_space_indexes[variable_index].push_back(j);
-	unsigned checked_points_number = 0;
 
 	while (SSPEMDD_utils::next_cartesian(search_space_indexes, index_arr, cur_point_indexes)) {
 		cur_point = fromPointIndexesToPoint(cur_point_indexes);
-		if (is_valid_search_space_point(cur_point)) {
-			fill_data_compute_residual(cur_point); // calculated residual is written to cur_point
-			checked_points_number++;
-		}
+		fill_data_compute_residual(cur_point); // calculated residual is written to cur_point
 	}
 }
 
@@ -724,8 +792,19 @@ double sspemdd_sequential::fill_data_compute_residual( search_space_point &point
 	//	std::cout << "Layer #" << jj + 1 << ": c=" << c1s.at(jj) << "..." << c2s.at(jj) << "; rho=" << rhos.at(jj) << "; np=" << Ns_points.at(jj) << std::endl;
 	//std::cout << residual << std::endl << std::endl;
 	//tau_comment: added tau to function call
-	point.residual = compute_modal_delays_residual_uniform(freqs, depths, c1s, c2s, rhos, Ns_points, point.R, point.tau, modal_delays, mode_numbers);
-
+	if (object_function_type == "uniform") {
+		point.residual = compute_modal_delays_residual_uniform(freqs, depths, c1s, c2s, rhos, Ns_points,
+			point.R, point.tau, modal_delays, mode_numbers);
+	}
+	else if (object_function_type == "weighted") {
+		point.residual = compute_modal_delays_residual_weighted(freqs, depths, c1s, c2s, rhos, Ns_points,
+			point.R, point.tau, modal_delays, weight_coeffs, mode_numbers);
+	}
+	else {
+		std::cerr << "unknown object_function_type " << object_function_type << std::endl;
+		exit(1);
+	}
+	
 	if (point.residual < record_point.residual) {
 		record_point.residual = point.residual;
 		record_point.cb       = point.cb;
@@ -758,54 +837,45 @@ void sspemdd_sequential::loadValuesToSearchSpaceVariables()
 	// search_space_variables[4...] - cws
 	std::vector<double> tmp_vec;
 	search_space.clear();
-
+	
+	record_point.cws.resize(n_layers_w);
+	for (unsigned long long i = 0; i < record_point.cws.size(); i++)
+		record_point.cws[i] = cw1_arr[i];
+	
 	// fill search_space_variables[0] with cb
 	tmp_vec.resize(ncb);
-	for (unsigned i = 0; i < ncb; i++)
+	for (unsigned long long i = 0; i < ncb; i++)
 		tmp_vec[i] = cb1 + (ncb == 1 ? 0 : i*(cb2 - cb1) / (ncb - 1));
 	search_space.push_back(tmp_vec);
 
 	// fill search_space_variables[1] with rhob
 	tmp_vec.resize(nrhob);
-	for (unsigned i = 0; i < nrhob; i++)
+	for (unsigned long long i = 0; i < nrhob; i++)
 		tmp_vec[i] = rhob1 + (nrhob == 1 ? 0 : i*(rhob2 - rhob1) / (nrhob - 1));
 	search_space.push_back(tmp_vec);
 
 	// fill search_space_variables[2] with R
 	tmp_vec.resize(nR);
-	for (unsigned i = 0; i < nR; i++)
+	for (unsigned long long i = 0; i < nR; i++)
 		tmp_vec[i] = R1 + (nR == 1 ? 0 : i*(R2 - R1) / (nR - 1));
 	search_space.push_back(tmp_vec);
 
 	// fill search_space_variables[3] with tau
 	tmp_vec.resize(ntau);
-	for (unsigned i = 0; i < ntau; i++)
+	for (unsigned long long i = 0; i < ntau; i++)
 		tmp_vec[i] = tau1 + (ntau == 1 ? 0 : i*(tau2 - tau1) / (ntau - 1));
 	search_space.push_back(tmp_vec);
 
 	// fill search_space_variables[4-...] with cws
-	tmp_vec.resize(ncpl);
-	std::vector<double> restricted_cws1{ 1490 };
-	for (unsigned i = 0; i < ncpl; i++)
-		tmp_vec[i] = cw1 + (ncpl == 1 ? 0 : i*(cw2 - cw1) / (ncpl - 1));
-	if ((launchType == 1) || (launchType == 3) || (launchType == 7) || (launchType == 8))
-		search_space.push_back(restricted_cws1); // fixed first cws in this case
-	else
+	for (unsigned long long i = 0; i < cw1_arr.size(); i++) {
+		tmp_vec.resize(ncpl_arr[i]);
+		for (unsigned long long j = 0; j < ncpl_arr[i]; j++)
+			tmp_vec[j] = cw1_arr[i] + (ncpl_arr[i] == 1 ? 0 : j*(cw2_arr[i] - cw1_arr[i]) / (ncpl_arr[i] - 1));
 		search_space.push_back(tmp_vec);
-	// other layers
-	for (unsigned i = 1; i < n_layers_w; i++)
-		search_space.push_back(tmp_vec);
-}
-
-bool sspemdd_sequential::is_valid_search_space_point(search_space_point point)
-{
-	std::vector<double> cws_vi = point.cws;
-	if ((launchType == 2) || (launchType == 3)) {
-		for (unsigned cws_vi_index = 0; cws_vi_index < cws_vi.size() - 1; cws_vi_index++)
-			if (cws_vi[cws_vi_index] >= cws_vi[cws_vi_index + 1])
-				return false;
 	}
-	return true;
+	
+	if (!rank)
+		std::cout << "loadValuesToSearchSpaceVariables() finished" << std::endl;
 }
 
 void sspemdd_sequential::findLocalMinHillClimbing()
@@ -821,6 +891,7 @@ void sspemdd_sequential::findLocalMinHillClimbing()
 
 	// calculate residual in the start point
 	cur_point = fromPointIndexesToPoint( cur_point_indexes );
+
 	fill_data_compute_residual( cur_point ); // calculated residual is written to cur_point
 	global_record_point = record_point;
 	global_record_point_indexes = record_point_indexes;
@@ -828,13 +899,14 @@ void sspemdd_sequential::findLocalMinHillClimbing()
 	// launch hill climbing for variables
 	bool isLocalMin;
 	bool isRecordUpdateInDimension;
-	unsigned checked_points_number = 0;
 	unsigned index_from;
 	double old_record_residual;
 	unsigned rand_numb;
-
+	unsigned skipped_points = 0;
+	checked_points.reserve(N_total);
+	
 	for (unsigned run_index = 0; run_index < iterated_local_search_runs; run_index++) {
-		std::cout << "run " << run_index << " of ILS" << std::endl;
+		std::cout << "iteration " << run_index << " of ILS" << std::endl;
 		do { // do while local min not reached
 			isLocalMin = true; // if changing of every variable will not lead to a record updata, then a local min reached
 			for (unsigned variable_index = 0; variable_index < search_space.size(); variable_index++) {
@@ -861,19 +933,18 @@ void sspemdd_sequential::findLocalMinHillClimbing()
 							", max index " << search_space[variable_index].size() - 1 << std::endl;
 					}
 					cur_point = fromPointIndexesToPoint(cur_point_indexes);
-					fill_data_compute_residual(cur_point); // calculated residual is written to cur_point
-					checked_points_number++;
-					if (verbosity > 0) {
-						std::cout << "checked_points_number " << checked_points_number << std::endl;
-						std::cout << "-----" << std::endl;
+					isRecordUpdateInDimension = false;
+					if (std::find(checked_points.begin(), checked_points.end(), cur_point) != checked_points.end()) {
+						skipped_points++;
+						continue;
 					}
+					fill_data_compute_residual(cur_point); // calculated residual is written to cur_point
+					checked_points.push_back(cur_point);
 					if (record_point.residual < old_record_residual) { // new record was found
 						record_point_indexes = cur_point_indexes;
 						isLocalMin = false;
 						isRecordUpdateInDimension = true;
 					}
-					else
-						isRecordUpdateInDimension = false;
 				} while (isRecordUpdateInDimension);
 			}
 		} while (!isLocalMin);
@@ -887,10 +958,9 @@ void sspemdd_sequential::findLocalMinHillClimbing()
 				      << global_record_point.residual << std::endl;
 		}
 
-		std::cout << "checked_points_number " << checked_points_number << std::endl;
-		std::cout << std::endl << "*** local minimum in hill climbing" << std::endl;
-		std::cout << "local record of residual " << record_point.residual << std::endl;
-		std::cout << "-----" << std::endl;
+		//std::cout << std::endl << "*** local minimum in hill climbing" << std::endl;
+		//std::cout << "local record of residual " << record_point.residual << std::endl;
+		//std::cout << "-----" << std::endl;
 		std::cout << "new random cur_point_indexes : " << std::endl;
 
 		// prmutate current global minimum point to obtain a new start point
@@ -912,9 +982,12 @@ void sspemdd_sequential::findLocalMinHillClimbing()
 		fill_data_compute_residual(cur_point); // calculated residual is written to cur_point
 		record_point = cur_point;
 		record_point_indexes = cur_point_indexes;
-	}
-	std::cout << "total checked_points_number " << checked_points_number << std::endl;
 
+		std::cout << "checked_points size " << checked_points.size() << std::endl;
+		std::cout << "skipped_points " << skipped_points << std::endl;
+		std::cout << "---" << std::endl;
+	}
+	
 	// during optimization record_point is a local minimum, finaly it's the global minimum
 	record_point = global_record_point;
 }
@@ -928,7 +1001,7 @@ search_space_point sspemdd_sequential::fromPointIndexesToPoint(std::vector<unsig
 	point.tau  = search_space[3][cur_point_indexes[3]];
 	for (unsigned i = 4; i < search_space.size(); i++)
 		point.cws.push_back(search_space[i][cur_point_indexes[i]]);
-	point.residual = START_RESIDUAL;
+	point.residual = START_HUGE_VALUE;
 	return point;
 }
 
@@ -941,7 +1014,7 @@ search_space_point sspemdd_sequential::fromDoubleVecToPoint(std::vector<double> 
 	point.tau  = double_vec[3];
 	for (unsigned i = 4; i < double_vec.size(); i++)
 		point.cws.push_back(double_vec[i]);
-	point.residual = START_RESIDUAL;
+	point.residual = START_HUGE_VALUE;
 	return point;
 }
 
@@ -950,15 +1023,164 @@ double sspemdd_sequential::getRecordResidual()
 	return record_point.residual;
 }
 
-void sspemdd_sequential::readDataFromFile(std::string myFileName, const int launchT) {
-	launchType = launchT;
-	std::ifstream myFileSynth(myFileName.c_str());
+void sspemdd_sequential::getThreeValuesFromStr(std::string str, double &val1, double &val2, double &val3)
+{
+	val1 = val3 = -1;
+	val2 = 1;
+	std::string word1, word2, word3;
+	for (auto &x : str)
+		if (x == ':')
+			x = ' ';
+	std::stringstream sstream;
+	sstream << str;
+	sstream >> word1 >> word2 >> word3;
+	std::istringstream(word1) >> val1;
+	std::istringstream(word2) >> val2;
+	std::istringstream(word3) >> val3;
+	if (val3 == -1)
+		val3 = val1;
+}
+
+void sspemdd_sequential::readScenario(std::string scenarioFileName)
+{
+/*
+	read constant and variable values from a scenario file
+*/
+	if (!rank)
+		std::cout << "scenarioFileName " << scenarioFileName << std::endl;
+	std::ifstream scenarioFile(scenarioFileName.c_str());
+
+	if (!scenarioFile.is_open()) {
+		std::cerr << "scenarioFile with the name " << scenarioFileName << " wasn't openend" << std::endl;
+		exit(1);
+	}
+
+	std::string str, word, tmp_word;
+	std::stringstream sstream;
+	unsigned cw_index = 0;
+	double cur_val_step = 0, cur_val1 = 0, cur_val2 = 0;
+	while (getline(scenarioFile, str)) {
+		if ((str == "") || (str[0] == '%'))
+			continue;
+		sstream << str;
+		sstream >> word;
+		if (word.find("dtimes_file") != std::string::npos)
+			sstream >> dtimesFileName;
+		else if (word.find("spmag_file") != std::string::npos)
+			sstream >> spmagFileName;
+		else if (word == "h")
+			sstream >> h;
+		else if (word == "H")
+			sstream >> H;
+		else if ((word.size() >= 2) && (word[0] == 'c') && (word[1] == 'w')) {
+			word = word.substr(2, word.size()-2);
+			std::istringstream(word) >> cw_index;
+			sstream >> word;
+			if (cw1_arr.size() < cw_index + 1)
+				cw1_arr.resize(cw_index + 1);
+			if (cw2_arr.size() < cw_index + 1)
+				cw2_arr.resize(cw_index + 1);
+			if (ncpl_arr.size() < cw_index + 1)
+				ncpl_arr.resize(cw_index + 1);
+			getThreeValuesFromStr(word, cur_val1, cur_val_step, cur_val2);
+			cw1_arr[cw_index] = cur_val1;
+			cw2_arr[cw_index] = cur_val2;
+			if (cur_val1 == cur_val2)
+				ncpl_arr[cw_index] = 1;
+			else
+				ncpl_arr[cw_index] = (unsigned)(ceil((cur_val2 - cur_val1) / cur_val_step)) + 1;
+		}
+		else if (word == "R") {
+			sstream >> word;
+			getThreeValuesFromStr(word, cur_val1, cur_val_step, cur_val2);
+			R1 = cur_val1;
+			R2 = cur_val2;
+			if (R1 == R2)
+				nR = 1;
+			else
+				nR = (unsigned)(ceil((cur_val2 - cur_val1) / cur_val_step)) + 1;
+		}
+		else if (word == "rhob") {
+			sstream >> word;
+			getThreeValuesFromStr(word, cur_val1, cur_val_step, cur_val2);
+			rhob1 = cur_val1;
+			rhob2 = cur_val2;
+			if (rhob1 == rhob2)
+				nrhob = 1;
+			else
+				nrhob = (unsigned)(ceil((cur_val2 - cur_val1) / cur_val_step)) + 1;
+		}
+		else if (word == "cb") {
+			sstream >> word;
+			getThreeValuesFromStr(word, cur_val1, cur_val_step, cur_val2);
+			cb1 = cur_val1;
+			cb2 = cur_val2;
+			if (cb1 == cb2)
+				ncb = 1;
+			else
+				ncb = (unsigned)(ceil((cur_val2 - cur_val1) / cur_val_step)) + 1;
+		}
+		else if (word == "tau") {
+			sstream >> word;
+			getThreeValuesFromStr(word, cur_val1, cur_val_step, cur_val2);
+			tau1 = cur_val1;
+			tau2 = cur_val2;
+			if (tau1 == tau2)
+				ntau = 1;
+			else
+				ntau = (unsigned)(ceil((cur_val2 - cur_val1) / cur_val_step)) + 1;
+		}
+		sstream.str(""); sstream.clear();
+	}
+	n_layers_w = cw1_arr.size();
+
+	if (!rank) {
+		std::cout << "Parameters :" << std::endl;
+		std::cout << "cw1_arr :" << std::endl;
+		for (auto &x : cw1_arr)
+			std::cout << x << " ";
+		std::cout << std::endl;
+		std::cout << "cw2_arr :" << std::endl;
+		for (auto &x : cw2_arr)
+			std::cout << x << " ";
+		std::cout << std::endl;
+		std::cout << "ncpl_arr :" << std::endl;
+		for (auto &x : ncpl_arr)
+			std::cout << x << " ";
+		std::cout << std::endl;
+		std::cout << "n_layers_w " << n_layers_w << std::endl;
+		std::cout << "nR " << nR << std::endl;
+		std::cout << "R1 " << R1 << std::endl;
+		std::cout << "R2 " << R2 << std::endl;
+		std::cout << "ntau " << ntau << std::endl;
+		std::cout << "tau1 " << tau1 << std::endl;
+		std::cout << "tau2 " << tau2 << std::endl;
+		std::cout << "nrhob " << nrhob << std::endl;
+		std::cout << "rhob1 " << rhob1 << std::endl;
+		std::cout << "rhob2 " << rhob2 << std::endl;
+		std::cout << "ncb " << ncb << std::endl;
+		std::cout << "cb1 " << cb1 << std::endl;
+		std::cout << "cb2 " << cb2 << std::endl;
+		std::cout << "dtimes_file " << dtimesFileName << std::endl;
+		std::cout << "spmag_file " << spmagFileName << std::endl;
+
+		std::cout << "readScenario() finished" << std::endl;
+	}
+}
+
+void sspemdd_sequential::readInputDataFromFiles()
+{	
+	std::ifstream dtimesFile(dtimesFileName.c_str());
+	if (!dtimesFile.is_open()) {
+		std::cerr << "dtimesFile " << dtimesFileName << " wasn't opened" << std::endl;
+		exit(1);
+	}
 	std::stringstream myLineStream;
 	std::string myLine;
 	double buff;
 	std::vector<double> buffvect;
 	// reading the "experimental" delay time data from a file
-	while (std::getline(myFileSynth, myLine)) {
+	while (std::getline(dtimesFile, myLine)) {
 		myLine.erase(std::remove(myLine.begin(), myLine.end(), '\r'), myLine.end()); // delete windows endline symbol for correct reading
 		myLineStream << myLine;
 		myLineStream >> buff;
@@ -974,82 +1196,46 @@ void sspemdd_sequential::readDataFromFile(std::string myFileName, const int laun
 		modal_delays.push_back(buffvect);
 		myLineStream.str(""); myLineStream.clear();
 	}
-	myFileSynth.close();
-
-	isHomogeneousWaterLayer = false;
-	if (myFileName.find("8000_extracted") != std::string::npos) {
-		isHomogeneousWaterLayer = true;
-		n_layers_w = 1;
-	}
-	else
-		n_layers_w = 5;
-
-	unsigned ppm = 2;
-	double h = 90;
-	double H = 600;
-	double layer_thickness_w = h / n_layers_w;
+	dtimesFile.close();
 	
-	for (unsigned jj = 1; jj <= n_layers_w; jj++)
-		depths.push_back(layer_thickness_w*jj);
-	depths.push_back(H);
+	weight_coeffs.clear();
+	std::ifstream spmagFile(spmagFileName.c_str());
+	if (spmagFile.is_open()) {
+		buffvect.clear();
+		while (std::getline(spmagFile, myLine)) {
+			myLine.erase(std::remove(myLine.begin(), myLine.end(), '\r'), myLine.end()); // delete windows endline symbol for correct reading
+			myLineStream << myLine;
+			myLineStream >> buff;
 
-	c1s.resize(n_layers_w + 1);
-	for (auto &x : c1s)
-		x = 1500;
-	c2s.resize(n_layers_w + 1);
-	for (auto &x : c2s)
-		x = 1500;
-	rhos.resize(n_layers_w + 1);
-	for (auto &x : rhos)
-		x = 1;
-	Ns_points.resize(n_layers_w + 1);
-	for (auto &x : Ns_points)
-		x = (unsigned)round(ppm*layer_thickness_w);
-	Ns_points.at(n_layers_w) = (unsigned)round(ppm*(H - h));
+			buffvect.clear();
+			while (!myLineStream.eof()) {
+				myLineStream >> buff;
+				buffvect.push_back(buff);
+			}
 
-	if (isHomogeneousWaterLayer) {
-		cb1 = 1600;
-		cb2 = 1900;
-		ncb = 61;
-		rhob1 = 1.4;
-		rhob2 = 2.0;
-		nrhob = 13;
-		tau1 = -0.015;
-		tau2 = 0.015;
-		ntau = 61;
-		R1 = R2 = 8000;
-		nR = 1;
-		cw1 = cw2 = 1500;
-		ncpl = 1;
+			weight_coeffs.push_back(buffvect);
+			myLineStream.str(""); myLineStream.clear();
+		}
+		spmagFile.close();
+
+		if (!rank) {
+			std::cout << "weight_coeffs.size() " << weight_coeffs.size() << std::endl;
+			std::cout << "weight_coeffs first 10 lines : " << std::endl;
+			for (unsigned i = 0; i < 10; i++) {
+				for (auto &x : weight_coeffs[i])
+					std::cout << x << " ";
+				std::cout << std::endl;
+			}
+		}
 	}
 	else {
-		// set other parameters of the search space
-		if ((launchType >= 4) && (launchType <= 6)) {
-			nR = 1;
-			R1 = 3500;
-			R2 = 3500;
-		}
-
-		if ((launchType == 5) || (launchType == 7)) {
-			cb1 = cb2 = 3000;
-			ncb = 1;
-			rhob1 = rhob2 = 3;
-			nrhob = 1;
-		}
-		else if ((launchType == 6) || (launchType == 8)) {
-			cb1 = cb2 = 4000;
-			ncb = 1;
-			rhob1 = rhob2 = 4;
-			nrhob = 1;
-		}
+		object_function_type = "uniform";
+		if (!rank)
+			std::cout << "spmagFile " << spmagFileName << " wasn't opened" << std::endl;
 	}
 
-	std::cout << "Parameters :" << std::endl;
-	std::cout << "ncpl " << ncpl << std::endl;
-	std::cout << "n_layers_w " << n_layers_w << std::endl;
-	std::cout << "nR " << nR << std::endl;
-	std::cout << "ntau " << ntau << std::endl;
-	std::cout << "nrhob " << nrhob << std::endl;
-	std::cout << "ncb " << ncb << std::endl;
-	std::cout << "isHomogeneousWaterLayer " << isHomogeneousWaterLayer << std::endl;
+	if (!rank) {
+		std::cout << "object_function_type changed to " << object_function_type << std::endl;
+		std::cout << "readInputDataFromFiles() finished " << std::endl;
+	}
 }

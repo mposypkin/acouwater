@@ -22,15 +22,18 @@ namespace ACOUSTIC {
         }
 
         double func(const double* x) {
-            sspemdd_sequential sspemdd_seq;
-            sspemdd_seq.readDataFromFile("8000_extracted.txt", 0);
+			sspemdd_sequential sspemdd_seq;
+			sspemdd_seq.readScenario("34_bottom_R_weighted160.txt");
+			sspemdd_seq.readInputDataFromFiles();
             sspemdd_seq.init();
             search_space_point cur_point;
-            cur_point.cb = x[0];
+			// set const values
+			cur_point.tau = sspemdd_seq.tau1;
+			cur_point.cws = sspemdd_seq.cw1_arr;
+			// variable values
+			cur_point.R = x[0];
             cur_point.rhob = x[1];
-            cur_point.tau = x[2];
-            cur_point.R = 8000;
-            cur_point.cws = sspemdd_seq.cws_fixed;
+            cur_point.cb = x[2];
             return sspemdd_seq.fill_data_compute_residual(cur_point);
         }
 
