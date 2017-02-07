@@ -23,11 +23,11 @@ namespace ACOUSTIC {
 
         double func(const double* x) {
 			sspemdd_sequential sspemdd_seq;
-			sspemdd_seq.readScenario("34_bottom_R_weighted160.txt");
+			sspemdd_seq.readScenario("312_bottom_R_weighted260.txt");
 			sspemdd_seq.readInputDataFromFiles();
             sspemdd_seq.init();
             search_space_point cur_point;
-			// set const values
+			// const values
 			cur_point.tau = sspemdd_seq.tau1;
 			cur_point.cws = sspemdd_seq.cw1_arr;
 			// variable values

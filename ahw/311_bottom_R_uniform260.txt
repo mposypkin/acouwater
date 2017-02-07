@@ -1,9 +1,9 @@
-% SSPEMDD scenario № 14
+% SSPEMDD scenario № 33
 % inverting for bottom and R,
 % sound speed in water is considered known
 % constant parameters
-dtimes_file 160_dtimes.txt
-spmag_file(string|no) 160_spmag.txt
+dtimes_file 260_dtimes.txt
+spmag_file(string|no) no
 h 50
 H 300
 % variable parameters
