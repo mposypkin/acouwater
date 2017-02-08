@@ -10,8 +10,9 @@
 
 #include <mpproblem.hpp>
 #include <box/box.hpp>
-#include <vector>
 #include <sspemdd_sequential.h>
+#include <vector>
+#include <utility>
 
 namespace ACOUSTIC {
 
@@ -48,21 +49,13 @@ namespace ACOUSTIC {
     public:
 
         /**
-         * Constructor
-         * @param n problem dimension
-         * @param vecA - a vector of left borders for each dimension
-         * @param vecB - a vector of right borders for each dimension
          * n = 3
-         * x0 = cb in (1600, 1900)
-         * x1 = rhob in (1.4, 2.0)
-         * x2 = tau in (-0.015, 0.015)
-         * vecA = {1600, 1.4, -0.015}
-         * vecB = {1900, 2.0, 0.015}
+         * x0 = radius (distance)
+         * x1 = bottom density 
+         * x2 = bottom sound speed 
          */
-        AcousticsHomogWaterProblemFactory(int n, const std::vector<double>& vecA, const std::vector<double>& vecB) :
-        mN(n),
-        mA(vecA),
-        mB(vecB) {
+        AcousticsHomogWaterProblemFactory(const std::vector<std::pair<double, double>> &vPair) : mVPair(vPair) {
+			mN = vPair.size();
         }
 
         COMPI::MPProblem<double>* getProblem() const {
@@ -70,17 +63,16 @@ namespace ACOUSTIC {
             prob->mVarTypes.assign(mN, COMPI::MPProblem<double>::VariableTypes::GENERIC);
             prob->mObjectives.push_back(new AcousticsHomogWaterObjective(mN));
             prob->mBox = new snowgoose::Box<double>(mN);
-            for (int i = 0; i < mN; i++) {
-                prob->mBox->mA[i] = mA[i];
-                prob->mBox->mB[i] = mB[i];
-            }
+			for (int i = 0; i < mN; i++) {
+				prob->mBox->mA[i] = mVPair[i].first;
+				prob->mBox->mB[i] = mVPair[i].second;
+			}
             return prob;
         }
 
     private:
         int mN;
-        std::vector<double> mA;
-        std::vector<double> mB;
+		std::vector<std::pair<double, double>> mVPair;
     };
 }
 
