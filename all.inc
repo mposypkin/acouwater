@@ -14,7 +14,8 @@ STD_OPT = -std=c++14
 # Auxilary headers
 SNOWGOOSE=$(ROOT)/../snowgoose
 COMPI=$(ROOT)/../COMPI
-EXTRA_INC = -I$(SNOWGOOSE) -I$(COMPI) 
+LOCSEARCH=$(ROOT)/../LOCSEARCH
+EXTRA_INC = -I$(SNOWGOOSE) -I$(COMPI) -I$(LOCSEARCH) 
 
 
 #common options
