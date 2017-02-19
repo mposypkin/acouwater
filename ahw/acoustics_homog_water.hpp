@@ -24,6 +24,7 @@ namespace ACOUSTIC {
 
         double func(const double* x) {
 			sspemdd_sequential sspemdd_seq;
+			sspemdd_seq.verbosity = 0;
 			sspemdd_seq.readScenario("312_bottom_R_weighted260.txt");
 			sspemdd_seq.readInputDataFromFiles();
             sspemdd_seq.init();

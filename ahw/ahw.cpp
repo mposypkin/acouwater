@@ -10,6 +10,7 @@
 int main(int argc, char *argv[]) {
     const int n = 3;
     sspemdd_sequential sspemdd_seq;
+	sspemdd_seq.verbosity = 0;
     sspemdd_seq.readScenario("312_bottom_R_weighted260.txt");
     std::vector<std::pair<double, double>> vPair;
     vPair.push_back(std::make_pair(sspemdd_seq.R1, sspemdd_seq.R2));

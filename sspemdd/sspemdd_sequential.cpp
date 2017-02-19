@@ -21,7 +21,7 @@ sspemdd_sequential::sspemdd_sequential() :
 	rhob2(2.0),
 	n_layers_w(1),
 	iterated_local_search_runs(10),
-	verbosity(0),
+	verbosity(1),
 	N_total (1),
 	rank (0)
 {
@@ -721,12 +721,12 @@ void sspemdd_sequential::init()
 	for (auto &x : ncpl_arr)
 		N_total *= (unsigned long long)x;
 
-	if (!rank)
+	if ( (!rank) && (verbosity > 0) )
 		std::cout << "N_total " << N_total << std::endl;
 
 	loadValuesToSearchSpaceVariables();
 
-	if (!rank)
+	if ( (!rank) && (verbosity > 0) )
 		std::cout << "init() finished" << std::endl;
 }
 
@@ -812,17 +812,19 @@ double sspemdd_sequential::fill_data_compute_residual( search_space_point &point
 		record_point.R        = point.R;
 		record_point.tau      = point.tau;
 		record_point.cws      = point.cws;
-		std::cout << std::endl;
-		std::cout << std::endl << "New residual minimum:" << std::endl;
-		std::cout << "err = " << record_point.residual << ", parameters:" << std::endl;
-		std::cout << "c_b = " << record_point.cb
-				  << ", rho_b = " << record_point.rhob
-				  << ", tau = " << record_point.tau
-			      << ", R = " << record_point.R << std::endl;
-		std::cout << "cws_min :" << std::endl;
-		for (auto &x : record_point.cws)
-			std::cout << x << " ";
-		std::cout << std::endl;
+		if (verbosity > 0) {
+			std::cout << std::endl;
+			std::cout << std::endl << "New residual minimum:" << std::endl;
+			std::cout << "err = " << record_point.residual << ", parameters:" << std::endl;
+			std::cout << "c_b = " << record_point.cb
+				<< ", rho_b = " << record_point.rhob
+				<< ", tau = " << record_point.tau
+				<< ", R = " << record_point.R << std::endl;
+			std::cout << "cws_min :" << std::endl;
+			for (auto &x : record_point.cws)
+				std::cout << x << " ";
+			std::cout << std::endl;
+		}
 	}
 
 	return point.residual;
@@ -1046,7 +1048,7 @@ void sspemdd_sequential::readScenario(std::string scenarioFileName)
 /*
 	read constant and variable values from a scenario file
 */
-	if (!rank)
+	if ( (!rank) && (verbosity > 0) )
 		std::cout << "scenarioFileName " << scenarioFileName << std::endl;
 	std::ifstream scenarioFile(scenarioFileName.c_str());
 
@@ -1134,7 +1136,7 @@ void sspemdd_sequential::readScenario(std::string scenarioFileName)
 	}
 	n_layers_w = cw1_arr.size();
 
-	if (!rank) {
+	if ( (!rank) && (verbosity > 0) ) {
 		std::cout << "Parameters :" << std::endl;
 		std::cout << "cw1_arr :" << std::endl;
 		for (auto &x : cw1_arr)
@@ -1218,7 +1220,7 @@ void sspemdd_sequential::readInputDataFromFiles()
 		}
 		spmagFile.close();
 
-		if (!rank) {
+		if ( (!rank) && (verbosity > 0) ) {
 			std::cout << "weight_coeffs.size() " << weight_coeffs.size() << std::endl;
 			std::cout << "weight_coeffs first 10 lines : " << std::endl;
 			for (unsigned i = 0; i < 10; i++) {
@@ -1230,11 +1232,11 @@ void sspemdd_sequential::readInputDataFromFiles()
 	}
 	else {
 		object_function_type = "uniform";
-		if (!rank)
+		if ( (!rank) && (verbosity > 0) )
 			std::cout << "spmagFile " << spmagFileName << " wasn't opened" << std::endl;
 	}
 
-	if (!rank) {
+	if ( (!rank) && (verbosity > 0) ){
 		std::cout << "object_function_type changed to " << object_function_type << std::endl;
 		std::cout << "readInputDataFromFiles() finished " << std::endl;
 	}
