@@ -624,8 +624,8 @@ std::vector<double> sspemdd_sequential::compute_wnumbers(double &omeg, // sound 
 		// special case of the point at the interface
 
 		if (ii == next_interface_idx) {         //ii -- z(ii+1), z(0) = 0
-			layer_number = layer_number + 1;    // вообще ii=89 -- вода, в ii=90 -дно,
-			// здесь ii = 89 -- интерфейс, уже дно
+			layer_number = layer_number + 1;    // пїЅпїЅпїЅпїЅпїЅпїЅ ii=89 -- пїЅпїЅпїЅпїЅ, пїЅ ii=90 -пїЅпїЅпїЅ,
+			// пїЅпїЅпїЅпїЅпїЅ ii = 89 -- пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅ пїЅпїЅпїЅ
 			cp = c.at(ii + 1);
 			dp = rho.at(ii + 1);
 			cm = c.at(ii);
@@ -655,8 +655,8 @@ std::vector<double> sspemdd_sequential::compute_wnumbers(double &omeg, // sound 
 	//input: diagonals ld, md, ud + interval [0 k_max]
 	//output: wnumbers2 = wave numbers squared
 
-	alglib::real_2d_array eigenvectors; // V - собств вектор
-	alglib::real_1d_array eigenvalues; // Lm -собств знач
+	alglib::real_2d_array eigenvectors; // V - пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
+	alglib::real_1d_array eigenvalues; // Lm -пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ
 	eigenvalues.setlength(N_points - 2);
 	alglib::ae_int_t eigen_count = 0;
 
@@ -876,8 +876,9 @@ void sspemdd_sequential::loadValuesToSearchSpaceVariables()
 		search_space.push_back(tmp_vec);
 	}
 	
-	if (!rank)
-		std::cout << "loadValuesToSearchSpaceVariables() finished" << std::endl;
+	if (!rank) {
+		//std::cout << "loadValuesToSearchSpaceVariables() finished" << std::endl;
+        }
 }
 
 void sspemdd_sequential::findLocalMinHillClimbing()
