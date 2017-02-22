@@ -1,6 +1,6 @@
 ROOT = ..
-BINS = ahw.exe testahw.exe
-TESTS = testahw.exe
+BINS = ahw.exe ahw_uniform.exe testahw.exe testahw_uniform.exe
+TESTS = testahw.exe testahw_uniform.exe
 LIBS =  $(ROOT)/sspemdd/sspemdd.a $(ROOT)/alglib/alglib.a
 ADDIT_INC = -I$(ROOT)/alglib -I$(ROOT)/sspemdd
 

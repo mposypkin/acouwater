@@ -876,9 +876,8 @@ void sspemdd_sequential::loadValuesToSearchSpaceVariables()
 		search_space.push_back(tmp_vec);
 	}
 	
-	if (!rank) {
-		//std::cout << "loadValuesToSearchSpaceVariables() finished" << std::endl;
-        }
+	if ((!rank) && (verbosity > 0))
+		std::cout << "loadValuesToSearchSpaceVariables() finished" << std::endl;
 }
 
 void sspemdd_sequential::findLocalMinHillClimbing()
