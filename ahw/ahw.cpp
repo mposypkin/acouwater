@@ -5,10 +5,13 @@
 #include <sspemdd_sequential.h>
 #include <methods/coordesc/coordesc.hpp>
 #include <methods/varcoordesc/varcoordesc.hpp>
+#include <pointgen/randpointgen.hpp>
 #include "acoustics_homog_water.hpp"
 
 int main(int argc, char *argv[]) {
     const int n = 3;
+    const int numberOfPoints = 4;
+    const double minimalGranularity = 1e-4;
     sspemdd_sequential sspemdd_seq;
     sspemdd_seq.verbosity = 0;
     sspemdd_seq.readScenario("312_bottom_R_weighted260.txt");
@@ -31,20 +34,9 @@ int main(int argc, char *argv[]) {
     x[1] = 0.5 * (sspemdd_seq.rhob1 + sspemdd_seq.rhob2);
     x[2] = 0.5 * (sspemdd_seq.cb1 + sspemdd_seq.cb2);
 
-    
-
-
-    double v = prob->mObjectives.at(0)->func(x);
-    std::cout << "Initial value: " << v << "\n";
-    std::cout << "Initial Solution: " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
-    std::cout.flush();
-
-
-    
-
 
 #if 0
-    LOCSEARCH::CoorDesc<double> desc(*prob, [&](double xdiff, double fdiff, double gran, double fval, int n) {        
+    LOCSEARCH::CoorDesc<double> desc(*prob, [&](double xdiff, double fdiff, double gran, double fval, int n) {
         return false;
     });
 
@@ -59,9 +51,15 @@ int main(int argc, char *argv[]) {
 
 
 #else    
-    LOCSEARCH::VarCoorDesc<double> desc(*prob, [&](double xdiff, double fdiff, const std::vector<double>& gran, double fval, int n) {        
-        return false;
-    });
+    LOCSEARCH::VarCoorDesc<double> desc(*prob, [&](double xdiff, double fdiff, const std::vector<double>& gran, double fval, int n) {
+        double a = snowgoose::VecUtils::maxAbs(gran.size(), gran.data());
+
+        std::cout << "maximal granularity = " << a << "\n";
+        if (a < minimalGranularity)
+            return true;
+        else
+            return false;
+        });
 
     auto watcher = [&](double xdiff, double fdiff, const std::vector<double>& gran, double fval, int stp) {
         std::cout << "\n";
@@ -80,9 +78,18 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < n; i++) {
         desc.getOptions().mShifts[i] = vPair[i].second - vPair[i].first;
     }
+    snowgoose::RandomPointGenerator<double> rgen(*(prob->mBox), 1);
+    for (int i = 0; i < numberOfPoints; i++) {
+        rgen.getPoint(x);
 
-    desc.search(x, v);
-    std::cout << "v = " << v << "\n";
+        double v = prob->mObjectives.at(0)->func(x);
+        std::cout << "Initial value: " << v << "\n";
+        std::cout << "Initial Solution: " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
+        std::cout.flush();
 
+        desc.search(x, v);
+        std::cout << "Found value: " << v << "\n";
+        std::cout << "Solution found: " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
+    }
     return 0;
 }
