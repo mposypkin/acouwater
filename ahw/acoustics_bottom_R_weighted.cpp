@@ -6,7 +6,7 @@
 #include <methods/coordesc/coordesc.hpp>
 #include <methods/varcoordesc/varcoordesc.hpp>
 #include <pointgen/randpointgen.hpp>
-#include "acoustics_homog_water.hpp"
+#include "acoustics_bottom_R_weighted.hpp"
 
 int main(int argc, char *argv[]) {
     const int n = 3;
