@@ -6,28 +6,40 @@
 #include <methods/coordesc/coordesc.hpp>
 #include <methods/varcoordesc/varcoordesc.hpp>
 #include <pointgen/randpointgen.hpp>
+#include "mcplusvcd.hpp"
 #include "acoustics_hydro_R_uniform.hpp"
 
 int main(int argc, char *argv[]) {
-	const int n = 5;
-	sspemdd_sequential sspemdd_seq;
-	sspemdd_seq.verbosity = 0;
-	sspemdd_seq.readScenario("310_hydro_R_uniform260.txt");
-	std::vector<std::pair<double, double>> vPair;
-	vPair.push_back(std::make_pair(sspemdd_seq.R1, sspemdd_seq.R2));
-	vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[1], sspemdd_seq.cw2_arr[1]));
-	vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[2], sspemdd_seq.cw2_arr[2]));
-	vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[3], sspemdd_seq.cw2_arr[3]));
-	vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[4], sspemdd_seq.cw2_arr[4]));
-	
-	ACOUSTIC::AcousticsHydroRUniformProblemFactory ahrupf(vPair);
-	COMPI::MPProblem<double>* prob = ahrupf.getProblem();
+    sspemdd_sequential sspemdd_seq;
+    sspemdd_seq.verbosity = 0;
+    sspemdd_seq.readScenario("310_hydro_R_uniform260.txt");
+    std::vector<std::pair<double, double>> vPair;
+    vPair.push_back(std::make_pair(sspemdd_seq.R1, sspemdd_seq.R2));
+    vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[1], sspemdd_seq.cw2_arr[1]));
+    vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[2], sspemdd_seq.cw2_arr[2]));
+    vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[3], sspemdd_seq.cw2_arr[3]));
+    vPair.push_back(std::make_pair(sspemdd_seq.cw1_arr[4], sspemdd_seq.cw2_arr[4]));
 
-	const double eps = 1e-5;
-	const double vref = 0.0111654;
-	double x[n] = { 6921, 1465, 1470, 1450, 1450 };
-	double v = prob->mObjectives.at(0)->func(x);
-	std::cout << "v = " << v << "\n";
-	if (SGABS(v - vref) >= eps)
-		return -1;
+    ACOUSTIC::AcousticsHydroRUniformProblemFactory ahrupf(vPair);
+    COMPI::MPProblem<double>* prob = ahrupf.getProblem();
+
+    // Setup solver
+    const int n = prob->mVarTypes.size();
+    const int numberOfPoints = 4;
+    const double minimalGranularity = 1e-4;
+
+    MCplusVCD mcsearch(*prob, minimalGranularity, numberOfPoints);
+
+    // Setup initial point
+    double x[n];
+    snowgoose::BoxUtils::getCenter(*(prob->mBox), (double*) x);
+    double v = prob->mObjectives.at(0)->func(x);
+
+    // Run solver
+    std::cout << "Searching with " << mcsearch.about() << "\n";
+    mcsearch.search(x, v);
+
+    // Print results
+    std::cout << "Found x = " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
+    std::cout << "Objective value = " << v << "\n";
 }
