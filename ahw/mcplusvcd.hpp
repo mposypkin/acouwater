@@ -18,6 +18,7 @@
 #include <common/vec.hpp>
 #include <methods/coordesc/coordesc.hpp>
 #include <methods/varcoordesc/varcoordesc.hpp>
+#include <methods/varcoorgrad/varcoorgrad.hpp>
 #include <pointgen/randpointgen.hpp>
 #include <spacefill/spacefillsearch.hpp>
 /**
@@ -64,8 +65,8 @@ public:
             std::cout.flush();
         };
 
-
-#else    
+#endif
+#if 0   
         LOCSEARCH::VarCoorDesc<double>* desc = new LOCSEARCH::VarCoorDesc<double>(prob, [&](double xdiff, double fdiff, const std::vector<double>& gran, double fval, int n) {
             double a = snowgoose::VecUtils::maxAbs(gran.size(), gran.data());
 
@@ -86,10 +87,33 @@ public:
             std::cout.flush();
         };
 
+        desc->getOptions().mHInit = .5;
+        desc->getOptions().mHJ = .2;
+#endif
+#if 1   
+        LOCSEARCH::VarCoorGrad<double>* desc = new LOCSEARCH::VarCoorGrad<double>(prob);
+
+
+        auto watcher = [&](double fval, const double* x, const std::vector<double>& gran, int stepn) {
+            const int n = mProb.mVarTypes.size();
+            std::cout << "\n";
+            std::cout << "Step: " << stepn << ", ";
+            std::cout << "Objective = " << fval << "\n";
+            //std::cout << "Solution: " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
+            std::cout << "Granularity vector: " << snowgoose::VecUtils::vecPrint(gran.size(), gran.data()) << "\n";
+            std::cout << "Maximal granularity: " << snowgoose::VecUtils::maxAbs(n, gran.data(), nullptr) << "\n";
+            std::cout.flush();
+        };
+
+        desc->getOptions().mHInit = .5;
+        desc->getOptions().mHLB = 1e-4;
+        desc->getOptions().mGradStep = 2;
+        desc->getOptions().mGradMaxSteps = 512;
+        desc->getOptions().mGradSpeedup = 1;
 #endif
         desc->getWatchers().push_back(watcher);
         for (int i = 0; i < n; i++) {
-            desc->getOptions().mShifts[i] = prob.mBox->mB[i] - prob.mBox->mA[i];
+            desc->getOptions().mScale[i] = prob.mBox->mB[i] - prob.mBox->mA[i];
         }
         snowgoose::RandomPointGenerator<double> *rgen = new snowgoose::RandomPointGenerator<double>(*(prob.mBox), numPoints, 1);
         mSFSearch = std::unique_ptr< BBSEARCH::SpaceFillSearch<double> >(new BBSEARCH::SpaceFillSearch<double> (prob, *rgen, *desc));
