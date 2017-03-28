@@ -16,11 +16,14 @@
 
 #include <memory>
 #include <common/vec.hpp>
+#include <funcscale.hpp>
+#include <funccnt.hpp>
 #include <methods/coordesc/coordesc.hpp>
 #include <methods/varcoordesc/varcoordesc.hpp>
 #include <methods/varcoorgrad/varcoorgrad.hpp>
 #include <pointgen/randpointgen.hpp>
 #include <spacefill/spacefillsearch.hpp>
+
 /**
  * Monte-Carlo + Variable Coordinate Descent
  */
@@ -30,7 +33,7 @@ public:
     class MyWatcher : public BBSEARCH::SpaceFillSearch<double>::Watcher {
 
         void beforeLocalSearch(double bestf, double inif, int n, const double* x, int cnt) override {
-            std::cout << "New point = " << inif << "\n";
+            std::cout << "New point = " << inif << "\n";            
         }
 
         void update(double prevf, double bestf, int n, const double* prevx, const double* newx, int cnt) override {
@@ -47,9 +50,18 @@ public:
      * @param minGran minimal granularity for coordinate descent (stopping criterium)
      * @param numPoints number of points for MC search
      */
-    MCplusVCD(const COMPI::MPProblem<double>& prob, double minGran, int numPoints)
+    MCplusVCD(COMPI::MPProblem<double>& prob, double minGran, int numPoints)
     : mProb(prob), mMinimalGranularity(minGran) {
         const int n = prob.mVarTypes.size();
+        std::vector<double> scale(n);
+        for (int i = 0; i < n; i++) {
+            scale[i] = prob.mBox->mB[i] - prob.mBox->mA[i];
+            prob.mBox->mA[i] /= scale[i];
+            prob.mBox->mB[i] /= scale[i];
+        }
+        prob.mObjectives[0] = new COMPI::FunctorScale<double>(*(prob.mObjectives[0]), scale);
+        prob.mObjectives[0] = new COMPI::FuncCnt<double>(*(prob.mObjectives[0]));
+        std::cout << "new box is " << snowgoose::BoxUtils::toString(*(prob.mBox)) << "\n";
 
 #if 0
         LOCSEARCH::CoorDesc<double> desc(*prob, [&](double xdiff, double fdiff, double gran, double fval, int n) {
@@ -98,6 +110,7 @@ public:
             const int n = mProb.mVarTypes.size();
             std::cout << "\n";
             std::cout << "Step: " << stepn << ", ";
+            std::cout << "Func calls: " << (dynamic_cast<COMPI::FuncCnt<double>*> (mProb.mObjectives[0]))->mCounters.mFuncCalls << "\n";
             std::cout << "Objective = " << fval << "\n";
             //std::cout << "Solution: " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
             std::cout << "Granularity vector: " << snowgoose::VecUtils::vecPrint(gran.size(), gran.data()) << "\n";
@@ -107,14 +120,12 @@ public:
 
         desc->getOptions().mHInit = .5;
         desc->getOptions().mHLB = 1e-4;
-        desc->getOptions().mGradStep = 2;
+        //desc->getOptions().mGradStep = .5;
+        desc->getOptions().mGradStep = -1;
         desc->getOptions().mGradMaxSteps = 512;
         desc->getOptions().mGradSpeedup = 1;
 #endif
         desc->getWatchers().push_back(watcher);
-        for (int i = 0; i < n; i++) {
-            desc->getOptions().mScale[i] = prob.mBox->mB[i] - prob.mBox->mA[i];
-        }
         snowgoose::RandomPointGenerator<double> *rgen = new snowgoose::RandomPointGenerator<double>(*(prob.mBox), numPoints, 1);
         mSFSearch = std::unique_ptr< BBSEARCH::SpaceFillSearch<double> >(new BBSEARCH::SpaceFillSearch<double> (prob, *rgen, *desc));
         mSFSearch->setWatcher(mWatcher);
