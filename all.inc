@@ -32,8 +32,11 @@ COPTS=$(COMOPTS)  $(PCOPTS)
 #C++ options
 CPPOPTS= $(COMOPTS) $(ADDIT_INCS) $(PCPPOPTS)
 
+#set this flag if static linking is needed
+STATIC = -static
+
 #Linker options for static linking
-LDFLAGS = -lm 
+LDFLAGS = -lm $(STATIC)
 
 
 MFLAGS =  COPTS="$(COPTS)" CPPOPTS="$(CPPOPTS) LIBTOOL="$(LIBTOOL)"
