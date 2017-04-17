@@ -21,6 +21,7 @@
 #include <methods/coordesc/coordesc.hpp>
 #include <methods/varcoordesc/varcoordesc.hpp>
 #include <methods/varcoorgrad/varcoorgrad.hpp>
+#include <methods/lins/goldsec/goldsec.hpp>
 #include <pointgen/randpointgen.hpp>
 #include <spacefill/spacefillsearch.hpp>
 
@@ -33,7 +34,7 @@ public:
     class MyWatcher : public BBSEARCH::SpaceFillSearch<double>::Watcher {
 
         void beforeLocalSearch(double bestf, double inif, int n, const double* x, int cnt) override {
-            std::cout << "New point = " << inif << "\n";            
+            std::cout << "New point = " << inif << "\n";
         }
 
         void update(double prevf, double bestf, int n, const double* prevx, const double* newx, int cnt) override {
@@ -117,13 +118,16 @@ public:
             std::cout << "Maximal granularity: " << snowgoose::VecUtils::maxAbs(n, gran.data(), nullptr) << "\n";
             std::cout.flush();
         };
-
+        LOCSEARCH::GoldenSecLS<double>* locs = new LOCSEARCH::GoldenSecLS<double>(prob);
+        locs->getOptions().mDoTracing = true;
+        locs->getOptions().mSInit = 1e-1;
+        locs->getOptions().mDelta = 1e-1;
+        locs->getOptions().mMaxForwardSteps = 512;
+        locs->getOptions().mMaxBackSteps = 8;
+        desc->getLineSearch().reset(locs);
         desc->getOptions().mHInit = .5;
         desc->getOptions().mHLB = 1e-4;
-        //desc->getOptions().mGradStep = .5;
-        desc->getOptions().mGradStep = -1;
-        desc->getOptions().mGradMaxSteps = 512;
-        desc->getOptions().mGradSpeedup = 1;
+        desc->getOptions().mDoTracing = true;
 #endif
         desc->getWatchers().push_back(watcher);
         snowgoose::RandomPointGenerator<double> *rgen = new snowgoose::RandomPointGenerator<double>(*(prob.mBox), numPoints, 1);
