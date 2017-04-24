@@ -18,10 +18,9 @@
 #include <common/vec.hpp>
 #include <funcscale.hpp>
 #include <funccnt.hpp>
-#include <methods/coordesc/coordesc.hpp>
-#include <methods/varcoordesc/varcoordesc.hpp>
-#include <methods/varcoorgrad/varcoorgrad.hpp>
+#include <methods/advancedcoordescent/advancedcoordescent.hpp>
 #include <methods/lins/goldsec/goldsec.hpp>
+#include <methods/lins/wolfels/wolfels.hpp>
 #include <pointgen/randpointgen.hpp>
 #include <spacefill/spacefillsearch.hpp>
 
@@ -35,6 +34,7 @@ public:
 
         void beforeLocalSearch(double bestf, double inif, int n, const double* x, int cnt) override {
             std::cout << "New point = " << inif << "\n";
+            std::cout << "x = " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
         }
 
         void update(double prevf, double bestf, int n, const double* prevx, const double* newx, int cnt) override {
@@ -104,7 +104,7 @@ public:
         desc->getOptions().mHJ = .2;
 #endif
 #if 1   
-        LOCSEARCH::VarCoorGrad<double>* desc = new LOCSEARCH::VarCoorGrad<double>(prob);
+        LOCSEARCH::AdvancedCoordinateDescent<double>* desc = new LOCSEARCH::AdvancedCoordinateDescent<double>(prob);
 
 
         auto watcher = [&](double fval, const double* x, const std::vector<double>& gran, int stepn) {
@@ -118,16 +118,29 @@ public:
             std::cout << "Maximal granularity: " << snowgoose::VecUtils::maxAbs(n, gran.data(), nullptr) << "\n";
             std::cout.flush();
         };
+#if 0       
         LOCSEARCH::GoldenSecLS<double>* locs = new LOCSEARCH::GoldenSecLS<double>(prob);
         locs->getOptions().mDoTracing = true;
-        locs->getOptions().mSInit = 1e-1;
-        locs->getOptions().mDelta = 1e-1;
+        locs->getOptions().mSInit = 2e-1;
+        locs->getOptions().mDelta = 0.5;
         locs->getOptions().mMaxForwardSteps = 512;
-        locs->getOptions().mMaxBackSteps = 8;
+        locs->getOptions().mMaxBackSteps = 2;
+#endif
+#if  1  
+        LOCSEARCH::WolfeLS<double> *locs = new LOCSEARCH::WolfeLS<double>(prob);
+        locs->getOptions().mDoTracing = true;
+        //locs->getOptions().mAskUser = true;
+        locs->getOptions().mSInit = 3e-1;
+        locs->getOptions().mInc = 2.0;
+        locs->getOptions().mMaxFailStepsBack = 2;
+#endif    
         desc->getLineSearch().reset(locs);
-        desc->getOptions().mHInit = .5;
+        desc->getOptions().mHInit = 0.5;
+        desc->getOptions().mDec = 0.25;
         desc->getOptions().mHLB = 1e-4;
+        desc->getOptions().mGradLB = 1e-4;
         desc->getOptions().mDoTracing = true;
+        //desc->getOptions().mSearchType = LOCSEARCH::AdvancedCoordinateDescent<double>::NO_DESCENT;
 #endif
         desc->getWatchers().push_back(watcher);
         snowgoose::RandomPointGenerator<double> *rgen = new snowgoose::RandomPointGenerator<double>(*(prob.mBox), numPoints, 1);

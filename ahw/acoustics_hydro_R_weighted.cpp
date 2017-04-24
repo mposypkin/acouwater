@@ -3,8 +3,6 @@
 #include <common/sgerrcheck.hpp>
 #include <common/utilmacro.hpp>
 #include <sspemdd_sequential.h>
-#include <methods/coordesc/coordesc.hpp>
-#include <methods/varcoordesc/varcoordesc.hpp>
 #include <pointgen/randpointgen.hpp>
 #include "mcplusvcd.hpp"
 #include "acoustics_hydro_R_weighted.hpp"
