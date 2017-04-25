@@ -20,7 +20,7 @@
 #include <funccnt.hpp>
 #include <methods/advancedcoordescent/advancedcoordescent.hpp>
 #include <methods/lins/goldsec/goldsec.hpp>
-#include <methods/lins/wolfels/wolfels.hpp>
+#include <methods/lins/smartls/smartls.hpp>
 #include <pointgen/randpointgen.hpp>
 #include <spacefill/spacefillsearch.hpp>
 
@@ -127,7 +127,7 @@ public:
         locs->getOptions().mMaxBackSteps = 2;
 #endif
 #if  1  
-        LOCSEARCH::WolfeLS<double> *locs = new LOCSEARCH::WolfeLS<double>(prob);
+        LOCSEARCH::SmartLS<double> *locs = new LOCSEARCH::SmartLS<double>(prob);
         locs->getOptions().mDoTracing = true;
         //locs->getOptions().mAskUser = true;
         locs->getOptions().mSInit = 3e-1;
