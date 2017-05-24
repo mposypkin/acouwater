@@ -24,7 +24,8 @@ COMOPTS = $(STD_OPT)\
 	   -I$(ROOT)\
            $(EXTRA_INC)\
            $(ADDIT_INC)\
-           $(OPTIMOPT)
+           $(OPTIMOPT)\
+	   -pthread
 
 #C options
 COPTS=$(COMOPTS)  $(PCOPTS)
@@ -33,10 +34,10 @@ COPTS=$(COMOPTS)  $(PCOPTS)
 CPPOPTS= $(COMOPTS) $(ADDIT_INCS) $(PCPPOPTS)
 
 #set this flag if static linking is needed
-STATIC = -static
+#STATIC = -static
 
 #Linker options for static linking
-LDFLAGS = -lm $(STATIC)
+LDFLAGS = -pthread  -L/usr/local/cuda/lib64 -lcudart -lm $(STATIC)
 
 
 MFLAGS =  COPTS="$(COPTS)" CPPOPTS="$(CPPOPTS) LIBTOOL="$(LIBTOOL)"
