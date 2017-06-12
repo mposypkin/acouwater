@@ -28,8 +28,21 @@ int main(int argc, char *argv[]) {
 
     // Setup initial point
     double x[n];
+
     snowgoose::BoxUtils::getCenter(*(prob->mBox), (double*) x);
+
+    // GPU point
+    x[0] = 23.4046;
+    x[1] = 2.07931;
+    x[2] = 5.74437;
+    /*
+    x[0] = 23.3849;
+    x[1] = 1.88475;
+    x[2] = 5.78572;
+    */
+    std::cout << "start X " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
     double v = prob->mObjectives.at(0)->func(x);
+    std::cout << "Objective value = " << v << "\n";
 
     // Run solver
     //std::cout << "Searching with " << mcsearch.about() << "\n";

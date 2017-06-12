@@ -11,14 +11,14 @@
 
 void FillLocalArrays (
 		const int tid,
-		const float cb,
-		const float rhob, 
+		const double cb,
+		const double rhob, 
 		const int batch_sz, 
 		const int cws_sz, 
-		const float* cws, 
-		float rhos[],
-		float c1s[],
-		float c2s[])
+		const double* cws, 
+		double rhos[],
+		double c1s[],
+		double c2s[])
 {
 	// FIXME: magic constant!
 	for (int i = 0; i < cws_sz +1; ++i)
@@ -41,34 +41,34 @@ void FillLocalArrays (
 }
 
 void FillDiagonals(
-		const float omega,
-		const float c[], 
+		const double omega,
+		const double c[], 
 		const int c_sz,
-		const float rho[],
+		const double rho[],
 		const int interface_idcs[], 
 		const int interface_idcs_sz,
-		const float meshsizes[],
-		float md[], 
-		float ud[] /*sd*/, 
+		const double meshsizes[],
+		double md[], 
+		double ud[] /*sd*/, 
 		int& mat_size)
 {
 	int N_points = c_sz;
 	int layer_number = 0;
 
-	float ld[MAX_MAT_SIZE];
-	float dz = meshsizes[layer_number];
+	double ld[MAX_MAT_SIZE];
+	double dz = meshsizes[layer_number];
 	for (int i = 0; i < N_points - 2; i++)
 	{
 		if ((layer_number < interface_idcs_sz) && (i == (interface_idcs[layer_number]-1)))
 		{
 			// special case of the point at the interface
 			++layer_number;
-			float dz_next = meshsizes[layer_number];
-			float cp = c[i + 1];
-			float dp = rho[i + 1];
-			float cm = c[i];
-			float dm = rho[i];
-			float q = 1 / (dz_next * dm + dz * dp);
+			double dz_next = meshsizes[layer_number];
+			double cp = c[i + 1];
+			double dp = rho[i + 1];
+			double cm = c[i];
+			double dm = rho[i];
+			double q = 1 / (dz_next * dm + dz * dp);
 
 			ld[i] = 2 * q * dp / dz;
 			// Magic!
@@ -96,11 +96,11 @@ void FillDiagonals(
 }
 
 Interval ComputeWavenumsLimits(
-		const float omega, 
-		const float c[], 
+		const double omega, 
+		const double c[], 
 		const int c_sz)
 {
-	float cmin = c[0], cmax = c[0];
+	double cmin = c[0], cmax = c[0];
 	for (int i = 0; i < c_sz; i++)
 	{
 		if (c[i] < cmin)
@@ -108,32 +108,32 @@ Interval ComputeWavenumsLimits(
 		if (c[i] > cmax)
 			cmax = c[i];
 	}
-	float kappamax = omega / cmin;
-	float kappamin = omega / cmax;
+	double kappamax = omega / cmin;
+	double kappamin = omega / cmax;
 	return Interval {kappamin*kappamin, kappamax*kappamax};
 }
 
 void FillLayers(const int rr, 
 		const int n_layers,
-		const float* depths, 
-		const float* rhos, 
-		const float* c1s,
-		const float* c2s, 
+		const double* depths, 
+		const double* rhos, 
+		const double* c1s,
+		const double* c2s, 
 		const int* Ns_points, 
-		float mesh[], 
+		double mesh[], 
 		int interface_idcs[], int& interface_idcs_sz,
-		float c[], int& c_sz, float rho[])
+		double c[], int& c_sz, double rho[])
 {
 	c[0] = 0;
 	rho[0] = 0;
 
 	// TODO: Rewrite me, i am UGLY ((
 	int n = 1; //total number of points
-	float zp = 0;
+	double zp = 0;
 	for (unsigned i = 0; i < n_layers; ++i)
 	{
 		int n_points_layer = Ns_points[i] / rr;
-		float zc = depths[i];
+		double zc = depths[i];
 		mesh[i] = (zc - zp) / n_points_layer; // dz
 
 		c[n - 1] = c1s[i];
@@ -155,14 +155,14 @@ void FillLayers(const int rr,
 }
 
 void ComputeWavenums(
-		const float omega,
+		const double omega,
 		const int n_layers,
 		const int* Ns_points,
-		const float* depths,
-		const float rhos[],
-		const float c1s[],
-		const float c2s[],
-		float wnums[],
+		const double* depths,
+		const double rhos[],
+		const double c1s[],
+		const double c2s[],
+		double wnums[],
 		int& wnums_sz)
 {
 	// Strange things happen here...
@@ -170,30 +170,30 @@ void ComputeWavenums(
 	for (int i = 0; i < n_layers; ++i)
 		Ns_points_aligned[i] = 12 * (Ns_points[i] / 12);
 
-	float coeff_extrap[4][4] = {
+	double coeff_extrap[4][4] = {
 			{1,0,0,0},
 			{-1, 2, 0, 0},
 			{0.5, -4, 4.5, 0},
-			{-1 / float(6), 4, -13.5, 32 / float(3)}};
+			{-1 / double(6), 4, -13.5, 32 / double(3)}};
 
 	for (int rr = 1; rr <= ORD_RICH; ++rr)
 	{
-		float mesh [MAX_MAT_SIZE];
+		double mesh [MAX_MAT_SIZE];
 		int interface_idcs [MAX_INTERFACES]; 
 		int interface_idcs_sz;
-		float c [MAX_MAT_SIZE];
+		double c [MAX_MAT_SIZE];
 		int   c_sz;
-		float rho [MAX_MAT_SIZE];
+		double rho [MAX_MAT_SIZE];
 		FillLayers(rr, n_layers, depths, rhos, c1s, c2s, Ns_points_aligned, 
 				mesh, interface_idcs, interface_idcs_sz, c, c_sz, rho);
 
 		int mat_size;
-		float md [MAX_MAT_SIZE];
-		float sd [MAX_MAT_SIZE];
+		double md [MAX_MAT_SIZE];
+		double sd [MAX_MAT_SIZE];
 		FillDiagonals(omega, c, c_sz, rho, interface_idcs, interface_idcs_sz, mesh, 
 				md, sd, mat_size);
 
-		float wnums_rr [MAX_WNUMS];
+		double wnums_rr [MAX_WNUMS];
 		int wnums_rr_sz;
 		Interval lim = ComputeWavenumsLimits(omega, c, c_sz);
 		wnums_rr_sz = bisectCpu(md, sd, mat_size, lim.ll, lim.rl, wnums_rr);
@@ -206,22 +206,22 @@ void ComputeWavenums(
 
 // This procedure computes MGV for a _single_ frequency
 void ComputeModalGroupVelocities (
-		const float freq,
+		const double freq,
 		const int n_layers,
 		const int* Ns_points,
-		const float* depths,
-		const float rhos[],
-		const float c1s[],
-		const float c2s[],
-		float mgv[MAX_WNUMS],
+		const double* depths,
+		const double rhos[],
+		const double c1s[],
+		const double c2s[],
+		double mgv[MAX_WNUMS],
 		int& mgv_sz)
 {
-	float wnums1 [MAX_WNUMS] = {0}; int wnums1_sz;
-	float wnums2 [MAX_WNUMS] = {0}; int wnums2_sz;
+	double wnums1 [MAX_WNUMS] = {0}; int wnums1_sz;
+	double wnums2 [MAX_WNUMS] = {0}; int wnums2_sz;
 	// magic number for numerical differentiation procedure
-	float deltaf = 0.05;
-	float omega1 = 2 * LOCAL_M_PI * freq + deltaf;
-	float omega2 = 2 * LOCAL_M_PI * freq;
+	double deltaf = 0.05;
+	double omega1 = 2 * LOCAL_M_PI * freq + deltaf;
+	double omega2 = 2 * LOCAL_M_PI * freq;
 	
 	ComputeWavenums(omega1, n_layers, Ns_points, depths, rhos, c1s, c2s, wnums1, wnums1_sz);
 	ComputeWavenums(omega2, n_layers, Ns_points, depths, rhos, c1s, c2s, wnums2, wnums2_sz);
@@ -237,38 +237,38 @@ void EvalPointsCPU(
 		const int batch_sz, 
 		const int cws_sz, 
 		const int dmaxsz,
-		const float* cws, 
+		const double* cws, 
 		const int* Ns_points,
-		const float* depths,
-		const float* R, 
-		const float* tau, 
-		const float* rhob, 
-		const float* cb, 
-		const float* freqs, 
+		const double* depths,
+		const double* R, 
+		const double* tau, 
+		const double* rhob, 
+		const double* cb, 
+		const double* freqs, 
 		const int freqs_sz,
-		//const float exp_delays[freqs_sz][dmaxsz], 
-		const float* exp_delays,
+		//const double exp_delays[freqs_sz][dmaxsz], 
+		const double* exp_delays,
 		const int* exp_delays_sz,
-		float* residuals)
+		double* residuals)
 {
 	int n_layers = cws_sz+1;
-	//float residual;
+	//double residual;
 	for (int tid = 0; tid < batch_sz; ++tid)
 	{
 		std::cout << " Tid: " << tid << std::endl;
-		float rhos[MAX_MAT_SIZE];
-		float c1s[MAX_MAT_SIZE];
-		float c2s[MAX_MAT_SIZE];
+		double rhos[MAX_MAT_SIZE];
+		double c1s[MAX_MAT_SIZE];
+		double c2s[MAX_MAT_SIZE];
 		FillLocalArrays(tid, cb[tid], rhob[tid], batch_sz, cws_sz, cws,  
 				rhos, c1s, c2s);
 
 		int n_residuals = 0;
-		float residuals_local = 0;
+		double residuals_local = 0;
 		// Compute mgvs for all frequencies
 		assert (freqs_sz < MAX_FREQS);
 		for (int i = 0; i < freqs_sz; ++i)
 		{
-			float calc_mgv[MAX_WNUMS];
+			double calc_mgv[MAX_WNUMS];
 			int calc_mgv_sz;
 			ComputeModalGroupVelocities(freqs[i], n_layers, Ns_points, depths, rhos, c1s, c2s, 
 				calc_mgv, calc_mgv_sz);
@@ -278,8 +278,8 @@ void EvalPointsCPU(
 
 			for (int j = 0; j < min_size; ++j) //iterate over modal velocities
 			{
-				float exp_delay = exp_delays[i*dmaxsz + j];
-				float calc_delay = R[tid] / calc_mgv[j];
+				double exp_delay = exp_delays[i*dmaxsz + j];
+				double calc_delay = R[tid] / calc_mgv[j];
 				if (exp_delay > 0)
 				{
 					residuals_local += pow(exp_delay + tau[tid] - calc_delay, 2);
@@ -302,11 +302,11 @@ void EvalPointBatchCPU(
 	// Transform AoS to SoA
 	size_t sz = batch.size();
 	size_t cws_sz = batch[0].cws.size();
-	float *R =   (float*) malloc(sz*sizeof(float));
-	float *tau = (float*) malloc(sz*sizeof(float));
-	float *rhob= (float*) malloc(sz*sizeof(float));
-	float *cb =  (float*) malloc(sz*sizeof(float));
-	float *cws = (float*) malloc(sz*cws_sz*sizeof(float));
+	double *R =   (double*) malloc(sz*sizeof(double));
+	double *tau = (double*) malloc(sz*sizeof(double));
+	double *rhob= (double*) malloc(sz*sizeof(double));
+	double *cb =  (double*) malloc(sz*sizeof(double));
+	double *cws = (double*) malloc(sz*cws_sz*sizeof(double));
 	for (size_t i = 0; i < sz; ++i)
 	{
 		R[i]    = batch[i].R;
@@ -324,7 +324,7 @@ void EvalPointBatchCPU(
 	// freqs array
 	int freqs_sz = freqs_d.size();
 	std::cout << " num freqs " << freqs_sz << std::endl;
-	float *freqs = (float*) malloc(freqs_sz*sizeof(float));
+	double *freqs = (double*) malloc(freqs_sz*sizeof(double));
 	for (int i = 0; i < freqs_sz; ++i)
 		freqs[i] = freqs_d[i];
 
@@ -337,14 +337,14 @@ void EvalPointBatchCPU(
 	int dmaxsz = 0;
 	for (size_t i = 0; i < freqs_sz; ++i)
 		dmaxsz = std::max(dmaxsz, exp_delays_sz[i]);
-	float *exp_delays = (float*) malloc(dmaxsz*freqs_sz*sizeof(float));
+	double *exp_delays = (double*) malloc(dmaxsz*freqs_sz*sizeof(double));
 	for (size_t i = 0; i < modal_delays.size(); ++i)
 		for (size_t j = 0; j < modal_delays[i].size(); ++j)
 			exp_delays[i*dmaxsz + j] = modal_delays[i][j];
 
 	
 	int n_layers = depths_d.size();
-	float *depths = (float*) malloc(n_layers*sizeof(float));
+	double *depths = (double*) malloc(n_layers*sizeof(double));
 	for (int i=0; i<n_layers; ++i)
 		depths[i] = depths_d[i];
 
@@ -352,7 +352,7 @@ void EvalPointBatchCPU(
 	for (int i=0; i<n_layers; ++i)
 		Ns_points[i] = Ns_points_d[i];
 
-	float *residuals = (float*) malloc(sz*sizeof(float));
+	double *residuals = (double*) malloc(sz*sizeof(double));
 
 
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
