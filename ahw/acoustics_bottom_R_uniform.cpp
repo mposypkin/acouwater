@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
     mcsearch.search(x, v);
 
     // Rescale x
-    const double *s = dynamic_cast<COMPI::FunctorScale<double>*>(prob->mObjectives[0].get())->getScale().data();
+    const double *s = mcsearch.getScale().data();
     snowgoose::VecUtils::vecMultVect(n, x, s, x);
     // Print results
     std::cout << "Found x = " << snowgoose::VecUtils::vecPrint(n, x) << "\n";

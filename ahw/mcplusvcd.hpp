@@ -173,6 +173,10 @@ public:
     std::string about() const override {
         return mSFSearch->about();
     }
+    
+    const std::vector<double>& getScale() const {
+        return mScale;
+    }
 
 private:
     const COMPI::MPProblem<double>& mProb;
