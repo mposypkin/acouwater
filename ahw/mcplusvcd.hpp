@@ -31,18 +31,31 @@ class MCplusVCD : public COMPI::Solver<double> {
 public:
 
     class MyWatcher : public BBSEARCH::SpaceFillSearch<double>::Watcher {
+    public:
+
+        void setScale(std::vector<double> scale) {
+            mScale = scale;
+        }
 
         void beforeLocalSearch(double bestf, double inif, int n, const double* x, int cnt) override {
+            const double *s = mScale.data();
+            double nx[n];
+            snowgoose::VecUtils::vecMultVect(n, x, s, nx);
             std::cout << "New point = " << inif << "\n";
-            std::cout << "x = " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
+            std::cout << "x = " << snowgoose::VecUtils::vecPrint(n, nx) << "\n";
         }
 
         void update(double prevf, double bestf, int n, const double* prevx, const double* newx, int cnt) override {
+            const double *s = mScale.data();
+            double x[n];
+            snowgoose::VecUtils::vecMultVect(n, newx, s, x);
             std::cout << "===========================\n";
             std::cout << "Record update from  " << prevf << " to " << bestf << " on step " << cnt << "\n";
-            std::cout << "x = " << snowgoose::VecUtils::vecPrint(n, newx) << "\n";
+            std::cout << "x = " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
             std::cout << "===========================\n";
         }
+
+        std::vector<double> mScale;
     };
 
     /**
@@ -52,7 +65,7 @@ public:
      * @param numPoints number of points for MC search
      */
     MCplusVCD(COMPI::MPProblem<double>& prob, double minGran, int numPoints)
-    : mProb(prob), mMinimalGranularity(minGran) {
+    : mProb(prob), mMinimalGranularity(minGran){
         const int n = prob.mVarTypes.size();
         std::vector<double> scale(n);
         for (int i = 0; i < n; i++) {
@@ -60,8 +73,12 @@ public:
             prob.mBox->mA[i] /= scale[i];
             prob.mBox->mB[i] /= scale[i];
         }
-        prob.mObjectives[0] = new COMPI::FunctorScale<double>(*(prob.mObjectives[0]), scale);
-        prob.mObjectives[0] = new COMPI::FuncCnt<double>(*(prob.mObjectives[0]));
+        mScale = scale;
+        mWatcher.setScale(scale);
+        std::shared_ptr<COMPI::Functor<double>> tp1(std::move(prob.mObjectives[0]));
+        prob.mObjectives[0] = std::make_shared<COMPI::FunctorScale<double>>(tp1, scale);
+        std::shared_ptr<COMPI::Functor<double>> tp2(std::move(prob.mObjectives[0]));
+        prob.mObjectives[0] = std::make_shared<COMPI::FuncCnt<double>>(tp2);
         std::cout << "new box is " << snowgoose::BoxUtils::toString(*(prob.mBox)) << "\n";
 
 #if 0
@@ -111,7 +128,8 @@ public:
             const int n = mProb.mVarTypes.size();
             std::cout << "\n";
             std::cout << "Step: " << stepn << ", ";
-            std::cout << "Func calls: " << (dynamic_cast<COMPI::FuncCnt<double>*> (mProb.mObjectives[0]))->mCounters.mFuncCalls << "\n";
+            //auto tmpp = dynamic_cast< COMPI::FuncCnt<double>* >(mProb.mObjectives[0].get());
+            std::cout << "Func calls: " << (dynamic_cast<COMPI::FuncCnt<double>*> (mProb.mObjectives[0].get()))->mCounters.mFuncCalls << "\n";
             std::cout << "Objective = " << fval << "\n";
             //std::cout << "Solution: " << snowgoose::VecUtils::vecPrint(n, x) << "\n";
             std::cout << "Granularity vector: " << snowgoose::VecUtils::vecPrint(gran.size(), gran.data()) << "\n";
@@ -160,6 +178,7 @@ private:
     const COMPI::MPProblem<double>& mProb;
     double mMinimalGranularity;
     MyWatcher mWatcher;
+    std::vector<double> mScale;
     std::unique_ptr<BBSEARCH::SpaceFillSearch<double>> mSFSearch;
 };
 

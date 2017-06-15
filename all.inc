@@ -4,8 +4,8 @@ CPP = c++
 LIBTOOL = ar -r
 
 #optimization options
-#OPTIMOPT=-g
-OPTIMOPT=-O
+OPTIMOPT=-g
+#OPTIMOPT=-O
 
 #C++ 11 support on
 STD_OPT = -std=c++14
