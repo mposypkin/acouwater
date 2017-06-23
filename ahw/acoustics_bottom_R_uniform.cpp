@@ -32,8 +32,12 @@ int main(int argc, char *argv[]) {
     double v = prob->mObjectives.at(0)->func(x);
 
     // Run solver
-    std::cout << "Searching with " << mcsearch.about() << "\n";
-    mcsearch.search(x, v);
+    //std::cout << "Searching with " << mcsearch.about() << "\n";
+    //mcsearch.search(x, v);
+    
+    // Run local solver
+    std::cout << "Searching with " << mcsearch.getLocalSearch()->about() << "\n";
+    mcsearch.getLocalSearch()->search(x, v);
 
     // Rescale x
     const double *s = mcsearch.getScale().data();

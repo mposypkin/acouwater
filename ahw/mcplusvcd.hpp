@@ -122,7 +122,7 @@ public:
 #endif
 #if 1   
         LOCSEARCH::AdvancedCoordinateDescent<double>* desc = new LOCSEARCH::AdvancedCoordinateDescent<double>(prob);
-
+        mLocalSearch = desc;
 
         auto watcher = [&](double fval, const double* x, const std::vector<double>& gran, int stepn) {
             const int n = mProb.mVarTypes.size();
@@ -178,7 +178,12 @@ public:
         return mScale;
     }
 
+    LOCSEARCH::AdvancedCoordinateDescent<double>* getLocalSearch() {
+        return mLocalSearch;
+    }
+    
 private:
+    LOCSEARCH::AdvancedCoordinateDescent<double>* mLocalSearch;
     const COMPI::MPProblem<double>& mProb;
     double mMinimalGranularity;
     MyWatcher mWatcher;
