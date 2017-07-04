@@ -1,13 +1,18 @@
 #include "sspemdd_sequential.h"
 #include "sspemdd_utils.h"
 #include "assert.h"
-#include "bisect_cpu.h"
+#include <cmath>
+
+#define BLOCKSIZE 8
 
 #define MAX_MAT_SIZE 2048
 #define MAX_FREQS 1000
 #define MAX_INTERFACES 10
 #define MAX_WNUMS 100
-#define ORD_RICH 1
+#define ORD_RICH 3
+
+#include "bisect_cpu.h"
+
 
 void FillLocalArrays (
 		const int tid,
@@ -132,7 +137,7 @@ void FillLayers(const int rr,
 	double zp = 0;
 	for (unsigned i = 0; i < n_layers; ++i)
 	{
-		int n_points_layer = Ns_points[i] / rr;
+		int n_points_layer = Ns_points[i] * rr;
 		double zc = depths[i];
 		mesh[i] = (zc - zp) / n_points_layer; // dz
 
@@ -196,7 +201,7 @@ void ComputeWavenums(
 		double wnums_rr [MAX_WNUMS];
 		int wnums_rr_sz;
 		Interval lim = ComputeWavenumsLimits(omega, c, c_sz);
-		wnums_rr_sz = bisectCpu(md, sd, mat_size, lim.ll, lim.rl, wnums_rr);
+		wnums_rr_sz = bisectGPU(md, sd, mat_size, lim.ll, lim.rl, wnums_rr);
 		if (rr == 1) 
 			wnums_sz = wnums_rr_sz;
 		for (int i = 0; i < wnums_rr_sz; ++i)
@@ -233,7 +238,65 @@ void ComputeModalGroupVelocities (
 	mgv_sz = wnums2_sz;
 }
 
-void EvalPointsCPU(
+void EvalPoint(
+		const unsigned int tid,
+		const int cws_sz, 
+		const int dmaxsz,
+		const double* cws, 
+		const int* Ns_points,
+		const double* depths,
+		const double R, 
+		const double tau, 
+		const double rhob, 
+		const double cb, 
+		const double* freqs, 
+		const int freqs_sz,
+		const double* exp_delays,
+		const int* exp_delays_sz,
+		double* residual,
+		int* n_res_global)
+{
+	int n_layers = cws_sz+1;
+	
+
+	if (tid >= freqs_sz)
+		return;
+	double rhos[MAX_MAT_SIZE];
+	double c1s[MAX_MAT_SIZE];
+	double c2s[MAX_MAT_SIZE];
+	FillLocalArrays(0, cb, rhob, 1, cws_sz, cws,  
+			rhos, c1s, c2s);
+
+	int n_residuals = 0;
+	double residuals_local = 0;
+	// Compute mgvs for all frequencies
+	//assert (freqs_sz < MAX_FREQS);
+	double calc_mgv[MAX_WNUMS];
+	int calc_mgv_sz;
+	ComputeModalGroupVelocities(freqs[tid], n_layers, Ns_points, depths, rhos, c1s, c2s, 
+		calc_mgv, calc_mgv_sz);
+
+	int min_size = calc_mgv_sz < exp_delays_sz[tid] ? 
+		calc_mgv_sz : exp_delays_sz[tid];
+
+	for (int j = 0; j < min_size; ++j) //iterate over modal velocities
+	{
+		double exp_delay = exp_delays[tid*dmaxsz + j];
+		double calc_delay = R / calc_mgv[j];
+		if (exp_delay > 0)
+		{
+			residuals_local += pow(exp_delay + tau - calc_delay, 2);
+			++n_residuals;
+		}
+	}
+
+	*residual += residuals_local;
+	*n_res_global += n_residuals;
+
+	//residual = sqrt(residuals_local/n_residuals);
+}
+void EvalPoints(
+		const unsigned int tid,
 		const int batch_sz, 
 		const int cws_sz, 
 		const int dmaxsz,
@@ -252,48 +315,129 @@ void EvalPointsCPU(
 		double* residuals)
 {
 	int n_layers = cws_sz+1;
-	//double residual;
-	for (int tid = 0; tid < batch_sz; ++tid)
+	
+
+	double rhos[MAX_MAT_SIZE];
+	double c1s[MAX_MAT_SIZE];
+	double c2s[MAX_MAT_SIZE];
+	FillLocalArrays(tid, cb[tid], rhob[tid], batch_sz, cws_sz, cws,  
+			rhos, c1s, c2s);
+
+	int n_residuals = 0;
+	double residuals_local = 0;
+	// Compute mgvs for all frequencies
+	//assert (freqs_sz < MAX_FREQS);
+	for (int i = 0; i < freqs_sz; ++i)
 	{
-		std::cout << " Tid: " << tid << std::endl;
-		double rhos[MAX_MAT_SIZE];
-		double c1s[MAX_MAT_SIZE];
-		double c2s[MAX_MAT_SIZE];
-		FillLocalArrays(tid, cb[tid], rhob[tid], batch_sz, cws_sz, cws,  
-				rhos, c1s, c2s);
+		double calc_mgv[MAX_WNUMS];
+		int calc_mgv_sz;
+		ComputeModalGroupVelocities(freqs[i], n_layers, Ns_points, depths, rhos, c1s, c2s, 
+			calc_mgv, calc_mgv_sz);
 
-		int n_residuals = 0;
-		double residuals_local = 0;
-		// Compute mgvs for all frequencies
-		assert (freqs_sz < MAX_FREQS);
-		for (int i = 0; i < freqs_sz; ++i)
+		int min_size = calc_mgv_sz < exp_delays_sz[i] ? 
+			calc_mgv_sz : exp_delays_sz[i];
+
+		for (int j = 0; j < min_size; ++j) //iterate over modal velocities
 		{
-			double calc_mgv[MAX_WNUMS];
-			int calc_mgv_sz;
-			ComputeModalGroupVelocities(freqs[i], n_layers, Ns_points, depths, rhos, c1s, c2s, 
-				calc_mgv, calc_mgv_sz);
-
-			int min_size = calc_mgv_sz < exp_delays_sz[i] ? 
-				calc_mgv_sz : exp_delays_sz[i];
-
-			for (int j = 0; j < min_size; ++j) //iterate over modal velocities
+			double exp_delay = exp_delays[i*dmaxsz + j];
+			double calc_delay = R[tid] / calc_mgv[j];
+			if (exp_delay > 0)
 			{
-				double exp_delay = exp_delays[i*dmaxsz + j];
-				double calc_delay = R[tid] / calc_mgv[j];
-				if (exp_delay > 0)
-				{
-					residuals_local += pow(exp_delay + tau[tid] - calc_delay, 2);
-					++n_residuals;
-				}
+				residuals_local += pow(exp_delay + tau[tid] - calc_delay, 2);
+				++n_residuals;
 			}
-
 		}
-		residuals[tid] = sqrt(residuals_local/n_residuals);
+
 	}
+	residuals[tid] = sqrt(residuals_local/n_residuals);
 }
 
+void EvalPointCPU(
+		search_space_point &point,
+		const std::vector<double> &freqs_d,
+		const std::vector<unsigned> &Ns_points_d,
+		const std::vector<double> &depths_d,
+		const std::vector<std::vector<double>> &modal_delays)
+{
+	// Transform AoS to SoA
+	size_t cws_sz = point.cws.size();
+	double *cws = (double*) malloc(cws_sz*sizeof(double));
+	for (size_t i = 0; i < cws_sz; ++i)
+		cws[i] = point.cws[i];
+	//TODO: stop converting this data every time
+	assert (freqs_d.size() == modal_delays.size());
+	
+	//std::cout << " copy const" << std::endl;
+	// freqs array
+	int freqs_sz = freqs_d.size();
+	//std::cout << " num freqs " << freqs_sz << std::endl;
+	double *freqs = (double*) malloc(freqs_sz*sizeof(double));
+	for (int i = 0; i < freqs_sz; ++i)
+		freqs[i] = freqs_d[i];
+
+	// exp_delays_sz
+	int *exp_delays_sz = (int*) malloc(freqs_sz*sizeof(int));
+	for (size_t i = 0; i < freqs_sz; ++i)
+		exp_delays_sz[i] = modal_delays[i].size();
+
+	// exp_delays 2d array
+	int dmaxsz = 0;
+	for (size_t i = 0; i < freqs_sz; ++i)
+		dmaxsz = std::max(dmaxsz, exp_delays_sz[i]);
+	double *exp_delays = (double*) malloc(dmaxsz*freqs_sz*sizeof(double));
+	for (size_t i = 0; i < modal_delays.size(); ++i)
+		for (size_t j = 0; j < modal_delays[i].size(); ++j)
+			exp_delays[i*dmaxsz + j] = modal_delays[i][j];
+
+	int n_layers = depths_d.size();
+	double *depths = (double*) malloc(n_layers*sizeof(double));
+	for (int i=0; i<n_layers; ++i)
+		depths[i] = depths_d[i];
+
+	int *Ns_points = (int*) malloc(n_layers*sizeof(int));
+	for (int i=0; i<n_layers; ++i)
+		Ns_points[i] = Ns_points_d[i];
+
+	// output array
+	double *residual = (double*) malloc(sizeof(double));
+	residual[0] = 0;
+	int *n_res_global = (int*) malloc(sizeof(int));
+	n_res_global[0] = 0;
+
+
+	for (int tid = 0; tid<freqs_sz; ++tid)
+		EvalPoint 
+			(
+			 tid,
+			 cws_sz, 
+			 dmaxsz, 
+			 cws, 
+			 Ns_points, 
+			 depths, 
+			 point.R, 
+			 point.tau, 
+			 point.rhob, 
+			 point.cb, 
+			 freqs, 
+			 freqs_sz,
+			 exp_delays,
+			 exp_delays_sz,
+			 residual,
+			 n_res_global);
+
+	point.residual = std::sqrt(*residual / *n_res_global);
+
+	free(Ns_points);
+	free(depths);
+	free(exp_delays_sz);
+	free(exp_delays);
+	free(freqs);
+	free(cws);
+	free(residual);
+	free(n_res_global);
+}
 void EvalPointBatchCPU(
-		std::vector <Point> &batch,
+		std::vector <search_space_point> &batch,
 		const std::vector<double> &freqs_d,
 		const std::vector<unsigned> &Ns_points_d,
 		const std::vector<double> &depths_d,
@@ -354,16 +498,11 @@ void EvalPointBatchCPU(
 
 	double *residuals = (double*) malloc(sz*sizeof(double));
 
-
-	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-	std::chrono::high_resolution_clock::time_point t2;
-	std::chrono::duration<double> time_span;
-	EvalPointsCPU(sz, cws_sz, dmaxsz, cws, Ns_points, depths, R, tau, rhob, cb, freqs, freqs_sz,
-			exp_delays, exp_delays_sz, residuals);
-	t2 = std::chrono::high_resolution_clock::now();
-	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-	std::cout << "Time " << time_span.count() << " s" << std::endl;
-
+	for (int tid = 0; tid<freqs_sz; ++tid)
+		EvalPoints
+			(tid, sz, cws_sz, dmaxsz, cws, Ns_points, depths, R, tau, rhob, cb, freqs, freqs_sz,
+				exp_delays, exp_delays_sz, residuals);
+	
 	for (size_t i = 0; i < sz; ++i)
 		batch[i].residual = residuals[i];
 
@@ -378,42 +517,4 @@ void EvalPointBatchCPU(
 	free(cb);
 	free(cws);
 	free(residuals);
-
-}
-
-Point sspemdd_sequential::generateRandomPoint()
-{
-	std::vector <unsigned> point_indexes;
-	for (const auto &var :search_space)
-	{
-		std::uniform_int_distribution<int> uni(0, var.size()-1);
-		point_indexes.push_back(uni(rng));
-		//std::cout << " rand var " << randnum << std::endl;
-	}
-	Point point = fromPointIndexesToPoint(point_indexes);
-	return std::move(point);
-}
-
-void sspemdd_sequential::ILSGPU(int ils_runs)
-{
-	std::cout << "Start ILS GPU" << std::endl;
-
-	const size_t batch_size = 100;
-	Point global_record;
-
-	std::cout << "Global record" << global_record.residual << std::endl;
-	for (size_t i = 0; i < ils_runs; ++i)
-	{
-		std::vector <Point> batch;
-		for (size_t j = 0; j < batch_size; ++j)
-			batch.push_back(generateRandomPoint());
-		std::cout << " start eval " << std::endl;
-		EvalPointBatchCPU(batch, freqs, Ns_points, depths, modal_delays);
-		Point best = *std::min_element(std::begin(batch), std::end(batch));
-		std::cout << "Best of batch: " << best.residual << std::endl;
-		if (best < global_record )
-			global_record = best;
-	}
-	record_point = global_record;
-	std::cout << "Global record" << global_record.residual << std::endl;
 }
