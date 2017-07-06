@@ -8,6 +8,12 @@ void EvalPointGPU( search_space_point &point,
 		const std::vector<unsigned> &Ns_points_d,
 		const std::vector<double> &depths_d,
 		const std::vector<std::vector<double>> &modal_delays);
+void EvalPointCPU( search_space_point &point,
+		const std::vector<double> &freqs_d,
+		const std::vector<unsigned> &Ns_points_d,
+		const std::vector<double> &depths_d,
+		const std::vector<std::vector<double>> &modal_delays);
+
 
 sspemdd_sequential::sspemdd_sequential() :
 	object_function_type("weighted"),
@@ -801,6 +807,8 @@ double sspemdd_sequential::fill_data_compute_residual( search_space_point &point
 	if (object_function_type == "uniform") {
 		//point.residual = compute_modal_delays_residual_uniform(freqs, depths, c1s, c2s, rhos, Ns_points, point.R, point.tau, modal_delays, mode_numbers);
 		EvalPointGPU(point, freqs, Ns_points, depths, modal_delays);
+		//EvalPointCPU(point, freqs, Ns_points, depths, modal_delays);
+		
 	}
 	else if (object_function_type == "weighted") {
 		point.residual = compute_modal_delays_residual_weighted(freqs, depths, c1s, c2s, rhos, Ns_points,

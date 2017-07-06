@@ -5,8 +5,8 @@
 
 struct Interval
 {
-	double ll;
-	double rl;
+	float ll;
+	float rl;
 };
 
 struct Interval_e
@@ -27,9 +27,9 @@ __host__  __device__
 #endif
 T max( const T& lhs, const T& rhs) { return (lhs < rhs) ? rhs : lhs; }
 
-inline double sign_f( const double& val) { return (val < 0.0f) ? -1.0f : 1.0f; }
+inline float sign_f( const float& val) { return (val < 0.0f) ? -1.0f : 1.0f; }
 
-inline void StoreEv (double eiv, double* eigenvalues, int& eigenvalues_c) { eigenvalues[eigenvalues_c++] = eiv; }
+inline void StoreEv (float eiv, float* eigenvalues, int& eigenvalues_c) { eigenvalues[eigenvalues_c++] = eiv; }
 inline void PushInterval (const Interval ival, const Interval_e& ival_e, Interval* intervals, Interval_e* intervals_e, int& intervals_c)
 {
 	intervals[intervals_c] = ival;
@@ -37,16 +37,16 @@ inline void PushInterval (const Interval ival, const Interval_e& ival_e, Interva
 	++intervals_c;	
 }
 
-static const double precision = 0.000000001;
-#define MIN_ABS_INTERVAL (double)5.0e-37
+static const float precision = 0.000001;
+#define MIN_ABS_INTERVAL (float)5.0e-37
 
-int computeSmallerEigenvals (const double x, const double* md, const double* sd, const int mat_size)
+int computeSmallerEigenvals (const float x, const float* md, const float* sd, const int mat_size)
 {
 	//assert (sd[0]==0.0f);
 	// perform (optimized) Gaussian elimination to determine the number
 	// of eigenvalues that are smaller than x
-	const double* sd_shifted = sd-1;
-	double  delta = 1.0f;
+	const float* sd_shifted = sd-1;
+	float  delta = 1.0f;
 	int count = 0;
 	delta = md[0] - x;
 	count += (delta < 0);
@@ -61,10 +61,10 @@ int computeSmallerEigenvals (const double x, const double* md, const double* sd,
 
 }
 
-double midpoint(const double& left, const double& right)
+float midpoint(const float& left, const float& right)
 {
 	// try to avoid overflow
-	double mid;
+	float mid;
 	if (sign_f (left) == sign_f (right))
 		mid = left + (right - left) * 0.5f;
 	else
@@ -72,12 +72,12 @@ double midpoint(const double& left, const double& right)
 
 	return mid;
 }
-inline double midpoint(const Interval& curint) { return midpoint (curint.ll, curint.rl);};
+inline float midpoint(const Interval& curint) { return midpoint (curint.ll, curint.rl);};
 
 bool intervalConverged (const Interval& c)
 {
-	double t0 = fabs (c.rl - c.ll);
-	double t1 = max (fabs(c.ll), fabs(c.rl)) * precision;
+	float t0 = fabs (c.rl - c.ll);
+	float t1 = max (fabs(c.ll), fabs(c.rl)) * precision;
 	return (t0 <= max (MIN_ABS_INTERVAL, t1));
 
 }
@@ -85,7 +85,7 @@ bool intervalConverged (const Interval& c)
 
 void PushOrStoreInterval (const Interval curint, const Interval_e curint_e,
 		Interval* intervals, Interval_e* intervals_e, int& intervals_c,
-		double* eigenvalues, int& eigenvalues_c)
+		float* eigenvalues, int& eigenvalues_c)
 {
 	if (intervalConverged (curint))
 		for (int i=0; i<(curint_e.rc-curint_e.lc); ++i)
@@ -95,9 +95,9 @@ void PushOrStoreInterval (const Interval curint, const Interval_e curint_e,
 	//std::cout <<  "interval  " <<  curint.ll << " " << curint.rl << " " << intervalConverged(curint) << "\n" << std::flush;
 }
 
-int bisectGPU (const double* md, const double* sd, const int mat_size,
-		const double ll, const double rl,
-		double* eigenvalues)
+int bisectGPU (const float* md, const float* sd, const int mat_size,
+		const float ll, const float rl,
+		float* eigenvalues)
 {
 	assert(ll <= rl);
 	int eigenvalues_c = 0; // Number of eigenvalues found
@@ -123,7 +123,7 @@ int bisectGPU (const double* md, const double* sd, const int mat_size,
 		int rc = curint_e.rc;
 		//std::cout << mat_size << " " << intervals_c << " Lim: " << curint.ll << " " << curint.rl << "lrc " << lc << " " << rc << "\n" << std::flush;
 
-		double m = midpoint (curint);
+		float m = midpoint (curint);
 		int mc = computeSmallerEigenvals (m, md, sd, mat_size);
 		if (mc-lc > 0)
 			PushOrStoreInterval (Interval {curint.ll, m}, Interval_e {lc, mc}, intervals, intervals_e, intervals_c, eigenvalues, eigenvalues_c);
