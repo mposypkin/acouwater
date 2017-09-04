@@ -3,16 +3,23 @@
 #include <iostream>
 #include <time.h>
 
-void EvalPointGPU( search_space_point &point,
-		const std::vector<double> &freqs_d,
-		const std::vector<unsigned> &Ns_points_d,
-		const std::vector<double> &depths_d,
-		const std::vector<std::vector<double>> &modal_delays);
+#ifndef BACKEND
+  #define BACKEND 1
+#endif
+
+#if BACKEND==2
 void EvalPointCPU( search_space_point &point,
 		const std::vector<double> &freqs_d,
 		const std::vector<unsigned> &Ns_points_d,
 		const std::vector<double> &depths_d,
 		const std::vector<std::vector<double>> &modal_delays);
+#elif BACKEND==3
+void EvalPointGPU( search_space_point &point,
+		const std::vector<double> &freqs_d,
+		const std::vector<unsigned> &Ns_points_d,
+		const std::vector<double> &depths_d,
+		const std::vector<std::vector<double>> &modal_delays);
+#endif
 
 
 sspemdd_sequential::sspemdd_sequential() :
@@ -805,9 +812,13 @@ double sspemdd_sequential::fill_data_compute_residual( search_space_point &point
 	//std::cout << residual << std::endl << std::endl;
 	//tau_comment: added tau to function call
 	if (object_function_type == "uniform") {
-		//point.residual = compute_modal_delays_residual_uniform(freqs, depths, c1s, c2s, rhos, Ns_points, point.R, point.tau, modal_delays, mode_numbers);
+#if BACKEND==1
+		point.residual = compute_modal_delays_residual_uniform(freqs, depths, c1s, c2s, rhos, Ns_points, point.R, point.tau, modal_delays, mode_numbers);
+#elif BACKEND==2
+		EvalPointCPU(point, freqs, Ns_points, depths, modal_delays);
+#elif BACKEND==3
 		EvalPointGPU(point, freqs, Ns_points, depths, modal_delays);
-		//EvalPointCPU(point, freqs, Ns_points, depths, modal_delays);
+#endif
 		
 	}
 	else if (object_function_type == "weighted") {

@@ -25,7 +25,8 @@ COMOPTS = $(STD_OPT)\
            $(EXTRA_INC)\
            $(ADDIT_INC)\
            $(OPTIMOPT)\
-	   -pthread
+	   -pthread\
+	   -DBACKEND=$(BACKEND)
 
 #C options
 COPTS=$(COMOPTS)  $(PCOPTS)
