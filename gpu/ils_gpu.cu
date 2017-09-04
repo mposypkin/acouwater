@@ -10,7 +10,16 @@
 #define MAX_FREQS 1000
 #define MAX_INTERFACES 10
 #define MAX_WNUMS 100
-#define ORD_RICH 1
+
+#ifndef ORD_RICH
+  #define ORD_RICH 1
+#endif
+
+#ifndef FTYPE	
+  #define ftype float
+#else
+  #define ftype FTYPE
+#endif
 
 #include "bisect_gpu.h"
 
@@ -27,14 +36,14 @@
 
 __device__ void FillLocalArrays (
 		const int tid,
-		const float cb,
-		const float rhob, 
+		const ftype cb,
+		const ftype rhob, 
 		const int batch_sz, 
 		const int cws_sz, 
-		const float* cws, 
-		float rhos[],
-		float c1s[],
-		float c2s[])
+		const ftype* cws, 
+		ftype rhos[],
+		ftype c1s[],
+		ftype c2s[])
 {
 	// FIXME: magic constant!
 	for (int i = 0; i < cws_sz +1; ++i)
@@ -57,34 +66,34 @@ __device__ void FillLocalArrays (
 }
 
 __device__ void FillDiagonals(
-		const float omega,
-		const float c[], 
+		const ftype omega,
+		const ftype c[], 
 		const int c_sz,
-		const float rho[],
+		const ftype rho[],
 		const int interface_idcs[], 
 		const int interface_idcs_sz,
-		const float meshsizes[],
-		float md[], 
-		float ud[] /*sd*/, 
+		const ftype meshsizes[],
+		ftype md[], 
+		ftype ud[] /*sd*/, 
 		int& mat_size)
 {
 	int N_points = c_sz;
 	int layer_number = 0;
 
-	float ld[MAX_MAT_SIZE];
-	float dz = meshsizes[layer_number];
+	ftype ld[MAX_MAT_SIZE];
+	ftype dz = meshsizes[layer_number];
 	for (int i = 0; i < N_points - 2; i++)
 	{
 		if ((layer_number < interface_idcs_sz) && (i == (interface_idcs[layer_number]-1)))
 		{
 			// special case of the point at the interface
 			++layer_number;
-			float dz_next = meshsizes[layer_number];
-			float cp = c[i + 1];
-			float dp = rho[i + 1];
-			float cm = c[i];
-			float dm = rho[i];
-			float q = 1 / (dz_next * dm + dz * dp);
+			ftype dz_next = meshsizes[layer_number];
+			ftype cp = c[i + 1];
+			ftype dp = rho[i + 1];
+			ftype cm = c[i];
+			ftype dm = rho[i];
+			ftype q = 1 / (dz_next * dm + dz * dp);
 
 			ld[i] = 2 * q * dp / dz;
 			// Magic!
@@ -112,11 +121,11 @@ __device__ void FillDiagonals(
 }
 
 __device__ Interval ComputeWavenumsLimits(
-		const float omega, 
-		const float c[], 
+		const ftype omega, 
+		const ftype c[], 
 		const int c_sz)
 {
-	float cmin = c[0], cmax = c[0];
+	ftype cmin = c[0], cmax = c[0];
 	for (int i = 0; i < c_sz; i++)
 	{
 		if (c[i] < cmin)
@@ -124,32 +133,32 @@ __device__ Interval ComputeWavenumsLimits(
 		if (c[i] > cmax)
 			cmax = c[i];
 	}
-	float kappamax = omega / cmin;
-	float kappamin = omega / cmax;
+	ftype kappamax = omega / cmin;
+	ftype kappamin = omega / cmax;
 	return Interval {kappamin*kappamin, kappamax*kappamax};
 }
 
 __device__ void FillLayers(const int rr, 
 		const int n_layers,
-		const float* depths, 
-		const float* rhos, 
-		const float* c1s,
-		const float* c2s, 
+		const ftype* depths, 
+		const ftype* rhos, 
+		const ftype* c1s,
+		const ftype* c2s, 
 		const int* Ns_points, 
-		float mesh[], 
+		ftype mesh[], 
 		int interface_idcs[], int& interface_idcs_sz,
-		float c[], int& c_sz, float rho[])
+		ftype c[], int& c_sz, ftype rho[])
 {
 	c[0] = 0;
 	rho[0] = 0;
 
 	// TODO: Rewrite me, i am UGLY ((
 	int n = 1; //total number of points
-	float zp = 0;
+	ftype zp = 0;
 	for (unsigned i = 0; i < n_layers; ++i)
 	{
 		int n_points_layer = Ns_points[i] * rr;
-		float zc = depths[i];
+		ftype zc = depths[i];
 		mesh[i] = (zc - zp) / n_points_layer; // dz
 
 		c[n - 1] = c1s[i];
@@ -171,14 +180,14 @@ __device__ void FillLayers(const int rr,
 }
 
 __device__ void ComputeWavenums(
-		const float omega,
+		const ftype omega,
 		const int n_layers,
 		const int* Ns_points,
-		const float* depths,
-		const float rhos[],
-		const float c1s[],
-		const float c2s[],
-		float wnums[],
+		const ftype* depths,
+		const ftype rhos[],
+		const ftype c1s[],
+		const ftype c2s[],
+		ftype wnums[],
 		int& wnums_sz)
 {
 	// Strange things happen here...
@@ -186,30 +195,30 @@ __device__ void ComputeWavenums(
 	for (int i = 0; i < n_layers; ++i)
 		Ns_points_aligned[i] = 12 * (Ns_points[i] / 12);
 
-	float coeff_extrap[4][4] = {
+	ftype coeff_extrap[4][4] = {
 			{1,0,0,0},
 			{-1, 2, 0, 0},
 			{0.5, -4, 4.5, 0},
-			{-1 / float(6), 4, -13.5, 32 / float(3)}};
+			{-1 / ftype(6), 4, -13.5, 32 / ftype(3)}};
 
 	for (int rr = 1; rr <= ORD_RICH; ++rr)
 	{
-		float mesh [MAX_MAT_SIZE];
+		ftype mesh [MAX_MAT_SIZE];
 		int interface_idcs [MAX_INTERFACES]; 
 		int interface_idcs_sz;
-		float c [MAX_MAT_SIZE];
+		ftype c [MAX_MAT_SIZE];
 		int   c_sz;
-		float rho [MAX_MAT_SIZE];
+		ftype rho [MAX_MAT_SIZE];
 		FillLayers(rr, n_layers, depths, rhos, c1s, c2s, Ns_points_aligned, 
 				mesh, interface_idcs, interface_idcs_sz, c, c_sz, rho);
 
 		int mat_size;
-		float md [MAX_MAT_SIZE];
-		float sd [MAX_MAT_SIZE];
+		ftype md [MAX_MAT_SIZE];
+		ftype sd [MAX_MAT_SIZE];
 		FillDiagonals(omega, c, c_sz, rho, interface_idcs, interface_idcs_sz, mesh, 
 				md, sd, mat_size);
 
-		float wnums_rr [MAX_WNUMS];
+		ftype wnums_rr [MAX_WNUMS];
 		int wnums_rr_sz;
 		Interval lim = ComputeWavenumsLimits(omega, c, c_sz);
 		wnums_rr_sz = bisectGPU(md, sd, mat_size, lim.ll, lim.rl, wnums_rr);
@@ -222,22 +231,22 @@ __device__ void ComputeWavenums(
 
 // This procedure computes MGV for a _single_ frequency
 __device__ void ComputeModalGroupVelocities (
-		const float freq,
+		const ftype freq,
 		const int n_layers,
 		const int* Ns_points,
-		const float* depths,
-		const float rhos[],
-		const float c1s[],
-		const float c2s[],
-		float mgv[MAX_WNUMS],
+		const ftype* depths,
+		const ftype rhos[],
+		const ftype c1s[],
+		const ftype c2s[],
+		ftype mgv[MAX_WNUMS],
 		int& mgv_sz)
 {
-	float wnums1 [MAX_WNUMS] = {0}; int wnums1_sz;
-	float wnums2 [MAX_WNUMS] = {0}; int wnums2_sz;
+	ftype wnums1 [MAX_WNUMS] = {0}; int wnums1_sz;
+	ftype wnums2 [MAX_WNUMS] = {0}; int wnums2_sz;
 	// magic number for numerical differentiation procedure
-	float deltaf = 0.05;
-	float omega1 = 2 * LOCAL_M_PI * freq + deltaf;
-	float omega2 = 2 * LOCAL_M_PI * freq;
+	ftype deltaf = 0.05;
+	ftype omega1 = 2 * LOCAL_M_PI * freq + deltaf;
+	ftype omega2 = 2 * LOCAL_M_PI * freq;
 	
 	ComputeWavenums(omega1, n_layers, Ns_points, depths, rhos, c1s, c2s, wnums1, wnums1_sz);
 	ComputeWavenums(omega2, n_layers, Ns_points, depths, rhos, c1s, c2s, wnums2, wnums2_sz);
@@ -252,18 +261,18 @@ __device__ void ComputeModalGroupVelocities (
 __global__ void EvalPoint_gpukernel(
 		const int cws_sz, 
 		const int dmaxsz,
-		const float* cws, 
+		const ftype* cws, 
 		const int* Ns_points,
-		const float* depths,
-		const float R, 
-		const float tau, 
-		const float rhob, 
-		const float cb, 
-		const float* freqs, 
+		const ftype* depths,
+		const ftype R, 
+		const ftype tau, 
+		const ftype rhob, 
+		const ftype cb, 
+		const ftype* freqs, 
 		const int freqs_sz,
-		const float* exp_delays,
+		const ftype* exp_delays,
 		const int* exp_delays_sz,
-		float* residual,
+		ftype* residual,
 		int* n_res_global)
 {
 	int n_layers = cws_sz+1;
@@ -272,17 +281,17 @@ __global__ void EvalPoint_gpukernel(
 
 	if (tid >= freqs_sz)
 		return;
-	float rhos[MAX_MAT_SIZE];
-	float c1s[MAX_MAT_SIZE];
-	float c2s[MAX_MAT_SIZE];
+	ftype rhos[MAX_MAT_SIZE];
+	ftype c1s[MAX_MAT_SIZE];
+	ftype c2s[MAX_MAT_SIZE];
 	FillLocalArrays(0, cb, rhob, 1, cws_sz, cws,  
 			rhos, c1s, c2s);
 
 	int n_residuals = 0;
-	float residuals_local = 0;
+	ftype residuals_local = 0;
 	// Compute mgvs for all frequencies
 	//assert (freqs_sz < MAX_FREQS);
-	float calc_mgv[MAX_WNUMS];
+	ftype calc_mgv[MAX_WNUMS];
 	int calc_mgv_sz;
 	ComputeModalGroupVelocities(freqs[tid], n_layers, Ns_points, depths, rhos, c1s, c2s, 
 		calc_mgv, calc_mgv_sz);
@@ -292,8 +301,8 @@ __global__ void EvalPoint_gpukernel(
 
 	for (int j = 0; j < min_size; ++j) //iterate over modal velocities
 	{
-		float exp_delay = exp_delays[tid*dmaxsz + j];
-		float calc_delay = R / calc_mgv[j];
+		ftype exp_delay = exp_delays[tid*dmaxsz + j];
+		ftype calc_delay = R / calc_mgv[j];
 		if (exp_delay > 0)
 		{
 			residuals_local += pow(exp_delay + tau - calc_delay, 2);
@@ -310,37 +319,37 @@ __global__ void EvalPoints_gpukernel(
 		const int batch_sz, 
 		const int cws_sz, 
 		const int dmaxsz,
-		const float* cws, 
+		const ftype* cws, 
 		const int* Ns_points,
-		const float* depths,
-		const float* R, 
-		const float* tau, 
-		const float* rhob, 
-		const float* cb, 
-		const float* freqs, 
+		const ftype* depths,
+		const ftype* R, 
+		const ftype* tau, 
+		const ftype* rhob, 
+		const ftype* cb, 
+		const ftype* freqs, 
 		const int freqs_sz,
-		//const float exp_delays[freqs_sz][dmaxsz], 
-		const float* exp_delays,
+		//const ftype exp_delays[freqs_sz][dmaxsz], 
+		const ftype* exp_delays,
 		const int* exp_delays_sz,
-		float* residuals)
+		ftype* residuals)
 {
 	int n_layers = cws_sz+1;
 	
 	const unsigned int tid = (blockIdx.x << BLOCKSIZE) + threadIdx.x;
 
-	float rhos[MAX_MAT_SIZE];
-	float c1s[MAX_MAT_SIZE];
-	float c2s[MAX_MAT_SIZE];
+	ftype rhos[MAX_MAT_SIZE];
+	ftype c1s[MAX_MAT_SIZE];
+	ftype c2s[MAX_MAT_SIZE];
 	FillLocalArrays(tid, cb[tid], rhob[tid], batch_sz, cws_sz, cws,  
 			rhos, c1s, c2s);
 
 	int n_residuals = 0;
-	float residuals_local = 0;
+	ftype residuals_local = 0;
 	// Compute mgvs for all frequencies
 	//assert (freqs_sz < MAX_FREQS);
 	for (int i = 0; i < freqs_sz; ++i)
 	{
-		float calc_mgv[MAX_WNUMS];
+		ftype calc_mgv[MAX_WNUMS];
 		int calc_mgv_sz;
 		ComputeModalGroupVelocities(freqs[i], n_layers, Ns_points, depths, rhos, c1s, c2s, 
 			calc_mgv, calc_mgv_sz);
@@ -350,8 +359,8 @@ __global__ void EvalPoints_gpukernel(
 
 		for (int j = 0; j < min_size; ++j) //iterate over modal velocities
 		{
-			float exp_delay = exp_delays[i*dmaxsz + j];
-			float calc_delay = R[tid] / calc_mgv[j];
+			ftype exp_delay = exp_delays[i*dmaxsz + j];
+			ftype calc_delay = R[tid] / calc_mgv[j];
 			if (exp_delay > 0)
 			{
 				residuals_local += pow(exp_delay + tau[tid] - calc_delay, 2);
@@ -372,7 +381,7 @@ void EvalPointGPU(
 {
 	// Transform AoS to SoA
 	size_t cws_sz = point.cws.size();
-	float *cws = (float*) malloc(cws_sz*sizeof(float));
+	ftype *cws = (ftype*) malloc(cws_sz*sizeof(ftype));
 	for (size_t i = 0; i < cws_sz; ++i)
 		cws[i] = point.cws[i];
 	//TODO: stop converting this data every time
@@ -382,7 +391,7 @@ void EvalPointGPU(
 	// freqs array
 	int freqs_sz = freqs_d.size();
 	//std::cout << " num freqs " << freqs_sz << std::endl;
-	float *freqs = (float*) malloc(freqs_sz*sizeof(float));
+	ftype *freqs = (ftype*) malloc(freqs_sz*sizeof(ftype));
 	for (int i = 0; i < freqs_sz; ++i)
 		freqs[i] = freqs_d[i];
 
@@ -395,13 +404,13 @@ void EvalPointGPU(
 	int dmaxsz = 0;
 	for (size_t i = 0; i < freqs_sz; ++i)
 		dmaxsz = std::max(dmaxsz, exp_delays_sz[i]);
-	float *exp_delays = (float*) malloc(dmaxsz*freqs_sz*sizeof(float));
+	ftype *exp_delays = (ftype*) malloc(dmaxsz*freqs_sz*sizeof(ftype));
 	for (size_t i = 0; i < modal_delays.size(); ++i)
 		for (size_t j = 0; j < modal_delays[i].size(); ++j)
 			exp_delays[i*dmaxsz + j] = modal_delays[i][j];
 
 	int n_layers = depths_d.size();
-	float *depths = (float*) malloc(n_layers*sizeof(float));
+	ftype *depths = (ftype*) malloc(n_layers*sizeof(ftype));
 	for (int i=0; i<n_layers; ++i)
 		depths[i] = depths_d[i];
 
@@ -410,18 +419,18 @@ void EvalPointGPU(
 		Ns_points[i] = Ns_points_d[i];
 
 	// output array
-	float *residual = (float*) malloc(sizeof(float));
+	ftype *residual = (ftype*) malloc(sizeof(ftype));
 	residual[0] = 0;
 	int *n_res_global = (int*) malloc(sizeof(int));
 	n_res_global[0] = 0;
 
-	m_CopyToGPU2(cws, cws_sz, float);
-	m_CopyToGPU2(freqs, freqs_sz, float);
-	m_CopyToGPU2(exp_delays, dmaxsz*freqs_sz, float);
+	m_CopyToGPU2(cws, cws_sz, ftype);
+	m_CopyToGPU2(freqs, freqs_sz, ftype);
+	m_CopyToGPU2(exp_delays, dmaxsz*freqs_sz, ftype);
 	m_CopyToGPU2(exp_delays_sz, freqs_sz, int);
-	m_CopyToGPU2(depths, n_layers, float);
+	m_CopyToGPU2(depths, n_layers, ftype);
 	m_CopyToGPU2(Ns_points, n_layers, int);
-	m_CopyToGPU2(residual, 1, float);
+	m_CopyToGPU2(residual, 1, ftype);
 	m_CopyToGPU2(n_res_global, 1, int);
 
 	cudaEvent_t kernel_start, kernel_stop;
@@ -464,7 +473,7 @@ void EvalPointGPU(
 	//printf("\n Time: %f", tm);
 	
 	checkCudaErrors(cudaMemcpy((void*) residual, (void*)g_residual, 
-				sizeof(float), cudaMemcpyDeviceToHost));
+				sizeof(ftype), cudaMemcpyDeviceToHost));
 	checkCudaErrors(cudaMemcpy((void*) n_res_global, (void*)g_n_res_global, 
 				sizeof(int), cudaMemcpyDeviceToHost));
 	//printf("\n Res_loc: %f %i", *residual, *n_res_global);
@@ -489,11 +498,11 @@ void EvalPointBatchGPU(
 	// Transform AoS to SoA
 	size_t sz = batch.size();
 	size_t cws_sz = batch[0].cws.size();
-	float *R =   (float*) malloc(sz*sizeof(float));
-	float *tau = (float*) malloc(sz*sizeof(float));
-	float *rhob= (float*) malloc(sz*sizeof(float));
-	float *cb =  (float*) malloc(sz*sizeof(float));
-	float *cws = (float*) malloc(sz*cws_sz*sizeof(float));
+	ftype *R =   (ftype*) malloc(sz*sizeof(ftype));
+	ftype *tau = (ftype*) malloc(sz*sizeof(ftype));
+	ftype *rhob= (ftype*) malloc(sz*sizeof(ftype));
+	ftype *cb =  (ftype*) malloc(sz*sizeof(ftype));
+	ftype *cws = (ftype*) malloc(sz*cws_sz*sizeof(ftype));
 	for (size_t i = 0; i < sz; ++i)
 	{
 		R[i]    = batch[i].R;
@@ -511,7 +520,7 @@ void EvalPointBatchGPU(
 	// freqs array
 	int freqs_sz = freqs_d.size();
 	std::cout << " num freqs " << freqs_sz << std::endl;
-	float *freqs = (float*) malloc(freqs_sz*sizeof(float));
+	ftype *freqs = (ftype*) malloc(freqs_sz*sizeof(ftype));
 	for (int i = 0; i < freqs_sz; ++i)
 		freqs[i] = freqs_d[i];
 
@@ -524,14 +533,14 @@ void EvalPointBatchGPU(
 	int dmaxsz = 0;
 	for (size_t i = 0; i < freqs_sz; ++i)
 		dmaxsz = std::max(dmaxsz, exp_delays_sz[i]);
-	float *exp_delays = (float*) malloc(dmaxsz*freqs_sz*sizeof(float));
+	ftype *exp_delays = (ftype*) malloc(dmaxsz*freqs_sz*sizeof(ftype));
 	for (size_t i = 0; i < modal_delays.size(); ++i)
 		for (size_t j = 0; j < modal_delays[i].size(); ++j)
 			exp_delays[i*dmaxsz + j] = modal_delays[i][j];
 
 	
 	int n_layers = depths_d.size();
-	float *depths = (float*) malloc(n_layers*sizeof(float));
+	ftype *depths = (ftype*) malloc(n_layers*sizeof(ftype));
 	for (int i=0; i<n_layers; ++i)
 		depths[i] = depths_d[i];
 
@@ -539,19 +548,19 @@ void EvalPointBatchGPU(
 	for (int i=0; i<n_layers; ++i)
 		Ns_points[i] = Ns_points_d[i];
 
-	float *residuals = (float*) malloc(sz*sizeof(float));
+	ftype *residuals = (ftype*) malloc(sz*sizeof(ftype));
 
-	m_CopyToGPU2(R,   sz, float);
-	m_CopyToGPU2(tau, sz, float);
-	m_CopyToGPU2(rhob,sz, float);
-	m_CopyToGPU2(cb,  sz, float);
-	m_CopyToGPU2(cws, sz*cws_sz, float);
-	m_CopyToGPU2(freqs, freqs_sz, float);
-	m_CopyToGPU2(exp_delays, dmaxsz*freqs_sz, float);
+	m_CopyToGPU2(R,   sz, ftype);
+	m_CopyToGPU2(tau, sz, ftype);
+	m_CopyToGPU2(rhob,sz, ftype);
+	m_CopyToGPU2(cb,  sz, ftype);
+	m_CopyToGPU2(cws, sz*cws_sz, ftype);
+	m_CopyToGPU2(freqs, freqs_sz, ftype);
+	m_CopyToGPU2(exp_delays, dmaxsz*freqs_sz, ftype);
 	m_CopyToGPU2(exp_delays_sz, freqs_sz, int);
-	m_CopyToGPU2(depths, n_layers, float);
+	m_CopyToGPU2(depths, n_layers, ftype);
 	m_CopyToGPU2(Ns_points, n_layers, int);
-	m_CopyToGPU2(residuals, sz, float);
+	m_CopyToGPU2(residuals, sz, ftype);
 
 	cudaEvent_t kernel_start, kernel_stop;
 	cudaEventCreate(&kernel_start);
@@ -579,7 +588,7 @@ void EvalPointBatchGPU(
 	printf("\n Time: %f", tm);
 	
 	checkCudaErrors(cudaMemcpy((void*) residuals, (void*)g_residuals, 
-				sz*sizeof(float), cudaMemcpyDeviceToHost));
+				sz*sizeof(ftype), cudaMemcpyDeviceToHost));
 	for (size_t i = 0; i < sz; ++i)
 		batch[i].residual = residuals[i];
 
