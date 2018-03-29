@@ -10,9 +10,9 @@
 
 #include <mpproblem.hpp>
 #include <box/box.hpp>
+#include <common/utilmacro.hpp>
 #include <sspemdd_sequential.h>
 #include <vector>
-#include <utility>
 
 namespace ACOUSTIC {
 
@@ -22,7 +22,7 @@ namespace ACOUSTIC {
         AcousticsHomogWaterUniformObjective(int n) : mN(n) {
         }
 
-        double func(const double* x) {
+        double func(const double* x) const {
 			sspemdd_sequential sspemdd_seq;
 			sspemdd_seq.verbosity = 0;
 			sspemdd_seq.readScenario("311_bottom_R_uniform260.txt");

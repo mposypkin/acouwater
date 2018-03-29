@@ -7,6 +7,15 @@ LIBTOOL = ar -r
 OPTIMOPT=-g
 #OPTIMOPT=-O
 
+#Pthread linking support options
+PTHREADLD=-lpthread
+
+#OpenMP specific compiler options
+#OPENMPOPT=-fopenmp
+
+#OpenMP specific linker options
+#OPENMPLD=-fopenmp
+
 #C++ 11 support on
 STD_OPT = -std=c++14
 
@@ -22,6 +31,8 @@ EXTRA_INC = -I$(SNOWGOOSE) -I$(COMPI) -I$(LOCSEARCH) -I$(BBSEARCH)
 #common options
 COMOPTS = $(STD_OPT)\
 	   -I$(ROOT)\
+	   $(OPENMPOPT)\
+           $(OPTIMOPT)\
            $(EXTRA_INC)\
            $(ADDIT_INC)\
            $(OPTIMOPT)
@@ -36,8 +47,7 @@ CPPOPTS= $(COMOPTS) $(ADDIT_INCS) $(PCPPOPTS)
 STATIC = -static
 
 #Linker options for static linking
-LDFLAGS = -lm $(STATIC)
-
+LDFLAGS = -lm $(OPENMPLD) $(PTHREADLD) $(STATIC)
 
 MFLAGS =  COPTS="$(COPTS)" CPPOPTS="$(CPPOPTS) LIBTOOL="$(LIBTOOL)"
 
