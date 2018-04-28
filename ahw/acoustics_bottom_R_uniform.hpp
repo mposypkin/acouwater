@@ -13,6 +13,7 @@
 #include <common/utilmacro.hpp>
 #include <sspemdd_sequential.h>
 #include <vector>
+#include <funcscale.hpp>
 
 namespace ACOUSTIC {
 
@@ -23,17 +24,17 @@ namespace ACOUSTIC {
         }
 
         double func(const double* x) const {
-			sspemdd_sequential sspemdd_seq;
-			sspemdd_seq.verbosity = 0;
-			sspemdd_seq.readScenario("311_bottom_R_uniform260.txt");
-			sspemdd_seq.readInputDataFromFiles();
+            sspemdd_sequential sspemdd_seq;
+            sspemdd_seq.verbosity = 0;
+            sspemdd_seq.readScenario("311_bottom_R_uniform260.txt");
+            sspemdd_seq.readInputDataFromFiles();
             sspemdd_seq.init();
             search_space_point cur_point;
-			// const values
-			cur_point.tau = sspemdd_seq.tau1;
-			cur_point.cws = sspemdd_seq.cw1_arr;
-			// variable values
-			cur_point.R = x[0];
+            // const values
+            cur_point.tau = sspemdd_seq.tau1;
+            cur_point.cws = sspemdd_seq.cw1_arr;
+            // variable values
+            cur_point.R = x[0];
             cur_point.rhob = x[1];
             cur_point.cb = x[2];
             return sspemdd_seq.fill_data_compute_residual(cur_point);
@@ -56,24 +57,30 @@ namespace ACOUSTIC {
          * x2 = bottom sound speed 
          */
         AcousticsHomogWaterUniformProblemFactory(const std::vector<std::pair<double, double>> &vPair) : mVPair(vPair) {
-			mN = vPair.size();
+            mN = vPair.size();
         }
 
         COMPI::MPProblem<double>* getProblem() const {
             COMPI::MPProblem<double>* prob = new COMPI::MPProblem<double>();
             prob->mVarTypes.assign(mN, COMPI::MPProblem<double>::VariableTypes::GENERIC);
-            prob->mObjectives.push_back(std::make_shared<AcousticsHomogWaterUniformObjective>(mN));
+            std::vector<double> scale(mN, 1.);
             prob->mBox = new snowgoose::Box<double>(mN);
-			for (int i = 0; i < mN; i++) {
-				prob->mBox->mA[i] = mVPair[i].first;
-				prob->mBox->mB[i] = mVPair[i].second;
-			}
+            for (int i = 0; i < mN; i++) {
+                prob->mBox->mA[i] = mVPair[i].first;
+                prob->mBox->mB[i] = mVPair[i].second;
+                scale[i] = prob->mBox->mB[i] - prob->mBox->mA[i];
+                prob->mBox->mA[i] /= scale[i];
+                prob->mBox->mB[i] /= scale[i];
+            }
+            auto obj = std::make_shared<AcousticsHomogWaterUniformObjective>(mN);
+            auto sobj = std::make_shared <COMPI::FunctorScale<double>>(obj, scale);
+            prob->mObjectives.push_back(sobj);
             return prob;
         }
 
     private:
         int mN;
-		std::vector<std::pair<double, double>> mVPair;
+        std::vector<std::pair<double, double>> mVPair;
     };
 }
 

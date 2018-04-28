@@ -4,8 +4,8 @@ CPP = c++
 LIBTOOL = ar -r
 
 #optimization options
-OPTIMOPT=-g
-#OPTIMOPT=-O
+#OPTIMOPT=-g
+OPTIMOPT=-O
 
 #Pthread linking support options
 PTHREADLD=-lpthread

@@ -20,6 +20,10 @@ int main(int argc, char *argv[]) {
     ACOUSTIC::AcousticsHomogWaterUniformProblemFactory ahwpf(vPair);
     COMPI::MPProblem<double>* prob = ahwpf.getProblem();
     double x[n] = {7016, 1.7, 1735};
+    for (int i = 0; i < n; i++) {
+        x[i] /= (dynamic_cast<COMPI::FunctorScale<double>*> (prob->mObjectives.at(0).get()))->getScale()[i];
+    }
+
     double v = prob->mObjectives.at(0)->func(x);
     std::cout << "v = " << v << "\n";
     std::cout << "vref = " << vref << "\n";
